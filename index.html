@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <title>Calcolatrice</title>
 <meta name="theme-color" content="#000000">
-<link rel="manifest" href="manifest.webmanifest?v=3">
-<link rel="apple-touch-icon" href="icon-192.png?v=3">
+<link rel="manifest" href="manifest.webmanifest?v=4">
+<link rel="apple-touch-icon" href="icon-192.png?v=4">
 <style>
   :root{
     --ground:#131016;--surface:#1c1722;--line:#332a3e;--ink:#efe9dc;
@@ -17,7 +17,9 @@
   }
   *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
   html,body{height:100%}
-  body{background:#000;color:var(--ink);font-family:var(--sans);overscroll-behavior:none}
+  body{background:#000;color:var(--ink);font-family:var(--sans);overscroll-behavior:none;
+    -webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+  input,textarea{-webkit-user-select:text;user-select:text}
   .screen{display:none;min-height:100dvh;flex-direction:column}
   .screen.on{display:flex}
   button{font-family:inherit;cursor:pointer}
@@ -204,30 +206,46 @@
   $('btnBack').onclick=function(){show('console')};
   $('btnLock').onclick=function(){stopMic();show('calc')};
 
-  /* ---------- calcolatrice ---------- */
-  var disp=$('calcDisp'),cur='0';
-  function paint(){disp.textContent=cur.replace(/\./g,',');}
+  /* ---------- calcolatrice: logica stile iOS (display = solo il numero corrente) ---------- */
+  var disp=$('calcDisp'),acc=null,op=null,entry='0',fresh=true;
+  function fmtNum(n){
+    if(!isFinite(n))return 'Errore';
+    var s=String(Math.round(n*1e10)/1e10);
+    if(s.replace('-','').replace('.','').length>9)s=String(Number(n.toPrecision(9)));
+    return s;
+  }
+  function paint(){disp.textContent=entry.replace('.',',');}
+  function resetCalc(){acc=null;op=null;entry='0';fresh=true;paint();}
+  function applyOp(a,o,b){
+    if(o==='+')return a+b; if(o==='−')return a-b;
+    if(o==='×')return a*b; return b===0?Infinity:a/b;
+  }
   $('cgrid').addEventListener('click',function(e){
     var b=e.target.closest('button');if(!b||b.id==='secretC')return;
     var k=b.dataset.k;if(!k)return;
-    if(/^[0-9]$/.test(k)){cur=(cur==='0'?k:cur+k).slice(0,12);paint();}
-    else if(k==='.'){var last=cur.split(/[÷×−+]/).pop();if(last.indexOf('.')<0){cur+='.';paint();}}
-    else if(k==='del'){cur=cur.length>1?cur.slice(0,-1):'0';paint();}
-    else if(k==='pm'){cur=cur.charAt(0)==='-'?cur.slice(1):'-'+cur;paint();}
-    else if(k==='pct'){cur=String(parseFloat(cur)/100||0);paint();}
-    else if(k==='='){
-      try{cur=String(Function('"use strict";return('+cur.replace(/×/g,'*').replace(/÷/g,'/').replace(/−/g,'-')+')')());}
-      catch(_){cur='0'}
-      if(cur.length>10)cur=String(parseFloat(cur).toPrecision(8));
+    if(/^[0-9]$/.test(k)){
+      if(fresh){entry=k;fresh=false;}
+      else if(entry.replace('-','').replace('.','').length<9)entry=(entry==='0'?k:entry+k);
       paint();
     }
-    else if('÷×−+'.indexOf(k)>=0&&cur.length<11){cur+=k;paint();}
+    else if(k==='.'){if(fresh){entry='0.';fresh=false;}else if(entry.indexOf('.')<0)entry+='.';paint();}
+    else if(k==='del'){entry=(fresh||entry.length<=1||(entry.length===2&&entry.charAt(0)==='-'))?'0':entry.slice(0,-1);if(entry==='0')fresh=true;paint();}
+    else if(k==='pm'){entry=entry.charAt(0)==='-'?entry.slice(1):(entry==='0'?entry:'-'+entry);paint();}
+    else if(k==='pct'){entry=fmtNum(parseFloat(entry)/100);fresh=true;paint();}
+    else if('÷×−+'.indexOf(k)>=0){
+      if(op!==null&&!fresh){acc=applyOp(acc,op,parseFloat(entry));entry=fmtNum(acc);}
+      else acc=parseFloat(entry);
+      op=k;fresh=true;paint();
+    }
+    else if(k==='='){
+      if(op!==null){entry=fmtNum(applyOp(acc,op,parseFloat(entry)));acc=null;op=null;fresh=true;paint();}
+    }
   });
   /* long-press segreto su C */
   var sb=$('secretC'),timer=null;
   function startHold(ev){ev.preventDefault();
     timer=setTimeout(function(){timer=null;show('console');},900);}
-  function endHold(){if(timer){clearTimeout(timer);timer=null;}cur='0';disp.textContent='0';}
+  function endHold(){if(timer){clearTimeout(timer);timer=null;resetCalc();}}
   sb.addEventListener('pointerdown',startHold);
   sb.addEventListener('pointerup',endHold);
   sb.addEventListener('pointerleave',endHold);
