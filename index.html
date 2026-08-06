@@ -22,7 +22,8 @@
   input,textarea{-webkit-user-select:text;user-select:text}
   .screen{display:none;min-height:100dvh;flex-direction:column}
   .screen.on{display:flex}
-  button{font-family:inherit;cursor:pointer}
+  button{font-family:inherit;cursor:pointer;touch-action:manipulation}
+  body{touch-action:manipulation}
 
   /* ---------- CALCOLATRICE (stile iOS 26) ---------- */
   #calc{background:#000;justify-content:flex-end;padding:calc(10px + env(safe-area-inset-top)) 14px calc(22px + env(safe-area-inset-bottom))}
@@ -217,7 +218,12 @@
     if(s.replace('-','').replace('.','').length>9)s=String(Number(n.toPrecision(9)));
     return s;
   }
-  function paint(){disp.textContent=entry.replace('.',',');}
+  function paint(){
+    var s=entry,neg=s.charAt(0)==='-';if(neg)s=s.slice(1);
+    var p=s.split('.');
+    p[0]=p[0].replace(/\B(?=(\d{3})+(?!\d))/g,'’'); // migliaia con apostrofo (formato svizzero)
+    disp.textContent=(neg?'-':'')+p[0]+(p.length>1?','+p[1]:'');
+  }
   function resetCalc(){acc=null;op=null;entry='0';fresh=true;paint();}
   function applyOp(a,o,b){
     if(o==='+')return a+b; if(o==='−')return a-b;
