@@ -166,6 +166,9 @@
   var $=function(id){return document.getElementById(id)};
   var LS='verify_cfg';
   var cfg=JSON.parse(localStorage.getItem(LS)||'{}');
+  /* precompilati: dopo una reinstallazione basta il PIN */
+  if(!cfg.url)cfg.url='https://svvylcewvscbgwukwzdh.supabase.co';
+  if(!cfg.profile)cfg.profile='dash';
   var state={mod:'oracolo',rank:null,suit:null,running:false};
 
   var SUITS=[{l:'S',sym:'♠',red:false},{l:'H',sym:'♥',red:true},{l:'D',sym:'♦',red:true},{l:'C',sym:'♣',red:false}];
@@ -365,7 +368,32 @@
       video:$('cfgVideo').value.trim(),playlist:$('cfgPlaylist').value.trim(),
       lang:$('cfgLang').value};
     localStorage.setItem(LS,JSON.stringify(cfg));
+    clearTimeout(pushT);pushT=setTimeout(cloudPush,1200);
   }
+  /* backup cloud: sopravvive a cancellazione+reinstallazione dell'app */
+  var pushT=null;
+  function cloudPush(){
+    if(!cfg.url||!cfg.pin||!cfg.profile)return;
+    fetch(cfg.url.replace(/\/$/,'')+'/functions/v1/config',{method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({pin:cfg.pin,profile:cfg.profile,action:'set',
+        data:{video:cfg.video||'',playlist:cfg.playlist||'',lang:cfg.lang||'en'}})}).catch(function(){});
+  }
+  function cloudPull(){
+    if(!cfg.url||!cfg.pin||!cfg.profile)return;
+    fetch(cfg.url.replace(/\/$/,'')+'/functions/v1/config',{method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({pin:cfg.pin,profile:cfg.profile,action:'get'})})
+      .then(function(r){return r.json()}).then(function(j){
+        if(!j||!j.data)return;
+        var ch=false;
+        ['video','playlist','lang'].forEach(function(k){
+          if(j.data[k]&&!cfg[k]){cfg[k]=j.data[k];ch=true;}});
+        if(ch){localStorage.setItem(LS,JSON.stringify(cfg));loadCfgUI();
+          slog('<span style="color:var(--ok)">☁️ impostazioni recuperate dal cloud</span>');}
+      }).catch(function(){});
+  }
+  $('cfgPin').addEventListener('change',cloudPull);
   /* auto-salvataggio: ogni digitazione o incolla salva subito */
   ['cfgUrl','cfgPin','cfgProfile','cfgVideo','cfgPlaylist','cfgLang'].forEach(function(id){
     $(id).addEventListener('input',saveNow);
@@ -384,13 +412,14 @@
   $('mkPlaylist').onclick=function(){
     saveNow();
     api('prophet',{action:'create_playlist'}).then(function(j){
-      if(j.playlist_id){cfg.playlist=j.playlist_id;localStorage.setItem(LS,JSON.stringify(cfg));
+      if(j.playlist_id){cfg.playlist=j.playlist_id;localStorage.setItem(LS,JSON.stringify(cfg));cloudPush();
         $('cfgPlaylist').value=j.playlist_id;slog('<span style="color:var(--ok)">✓ playlist creata: '+j.playlist_id+'</span>');}
       else slog('<span style="color:var(--err)">✗ '+j.error+'</span>');
     }).catch(function(e){slog('<span style="color:var(--err)">✗ '+e+'</span>')});
   };
 
-  /* ---------- service worker ---------- */
+  /* ---------- avvio ---------- */
+  cloudPull();
   if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(function(){});
 })();
 </script>
