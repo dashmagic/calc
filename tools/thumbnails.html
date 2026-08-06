@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>VERIFY — generatore miniature</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+  :root{--ground:#131016;--surface:#1c1722;--line:#332a3e;--ink:#efe9dc;--muted:#9a8fa6;--brass:#c9a227}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--ground);color:var(--ink);font-family:-apple-system,'Segoe UI',Roboto,sans-serif;
+    max-width:820px;margin:0 auto;padding:40px 20px;line-height:1.6}
+  h1{font-family:Palatino,Georgia,serif;font-weight:600;margin-bottom:4px}
+  h1 span{color:var(--brass)}
+  p{color:var(--muted);font-size:14.5px;margin-bottom:14px}
+  .row{display:flex;gap:12px;flex-wrap:wrap;margin:18px 0}
+  button,label.file{background:var(--brass);color:#17120a;border:none;border-radius:10px;
+    padding:12px 20px;font-size:15px;font-weight:700;cursor:pointer;display:inline-block}
+  button.ghost,label.file{background:var(--surface);color:var(--ink);border:1px solid var(--line);font-weight:500}
+  input[type=file]{display:none}
+  canvas{width:100%;max-width:640px;border-radius:12px;border:1px solid var(--line);display:block;margin:10px 0}
+  #status{font-family:ui-monospace,Menlo,monospace;font-size:12px;color:var(--muted);min-height:20px}
+</style>
+</head>
+<body>
+<h1>VERIFY<span>.</span> — miniature YouTube</h1>
+<p>Genera le 52 miniature (1280×720) + la versione neutra + le icone della PWA.
+Opzionale: carica una foto del mago (che tiene una carta coperta o guarda in camera) come sfondo — rende l'effetto molto più personale.</p>
+
+<div class="row">
+  <select id="lang" style="background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:12px 16px;font-size:15px">
+    <option value="en">English</option>
+    <option value="sq">Shqip</option>
+    <option value="it">Italiano</option>
+  </select>
+  <label class="file">📷 Foto o 🎬 video (opzionale)<input type="file" id="photo" accept="image/*,video/*"></label>
+  <button class="ghost" id="preview">Anteprima (7♠)</button>
+  <button id="genAll">Genera 52 miniature + neutra (zip)</button>
+  <button class="ghost" id="genIcons">Scarica icone PWA</button>
+</div>
+<p style="font-size:13px">Le miniature vanno caricate nel bucket in <b>thumbs/&lt;profilo&gt;/&lt;lingua&gt;/</b> (es. <code>thumbs/nik/en/</code>). Genera uno zip per ogni lingua che userete.</p>
+<p style="font-size:13px"><b>Consiglio pro:</b> scatta la foto con il mago che tiene in mano una <b>carta bianca</b> (o un cartoncino) rivolta verso la camera, ben illuminata e senza inclinarla in prospettiva. Poi qui sotto <b>trascina la carta disegnata sopra quella vera</b> e regola dimensione/rotazione: in ogni miniatura sembrerà che tenesse in mano proprio la carta dello spettatore.</p>
+<div class="row" id="vidCtrls" style="display:none;align-items:center">
+  <label style="font-size:13px;background:none;color:var(--ink);padding:0;font-weight:500;flex:1">Fotogramma
+    <input type="range" id="vScrub" min="0" max="1000" value="0" style="width:100%"></label>
+  <span style="font-size:12px;color:var(--muted)">scorri il video e fermati sul momento giusto</span>
+</div>
+<div class="row" id="cardCtrls" style="display:none;align-items:center">
+  <label style="font-size:13px;background:none;color:var(--ink);padding:0;font-weight:500">Dimensione <input type="range" id="cScale" min="120" max="560" value="270"></label>
+  <label style="font-size:13px;background:none;color:var(--ink);padding:0;font-weight:500">Rotazione <input type="range" id="cRot" min="-45" max="45" value="-3"></label>
+  <label style="font-size:13px;background:none;color:var(--ink);padding:0;font-weight:500"><input type="checkbox" id="cText" checked> testo grande</label>
+  <span style="font-size:12px;color:var(--muted)">→ trascina la carta sulla foto</span>
+</div>
+<div id="status"></div>
+<canvas id="cv" width="1280" height="720"></canvas>
+
+<script>
+(function(){
+  var cv=document.getElementById('cv'),ctx=cv.getContext('2d'),photo=null;
+  var status=function(m){document.getElementById('status').textContent=m};
+  var SUITS=[{l:'S',sym:'♠',red:false},{l:'H',sym:'♥',red:true},{l:'D',sym:'♦',red:true},{l:'C',sym:'♣',red:false}];
+  var RANKL=['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+  var LANGS={
+    en:{ranks:['ACE','TWO','THREE','FOUR','FIVE','SIX','SEVEN','EIGHT','NINE','TEN','JACK','QUEEN','KING'],
+        suits:['SPADES','HEARTS','DIAMONDS','CLUBS'],
+        head:'YOU WILL CHOOSE',mid:function(r){return 'THE '+this.ranks[r]},bot:function(s){return 'OF '+this.suits[s]},
+        tag:'Sealed inside this video. Do not open.',
+        n1:'MY PREDICTION',n2:'IS SEALED HERE',n3:'I will never change it.'},
+    sq:{ranks:['ASI','DYSHI','TRESHI','KATËRSHI','PESËSHI','GJASHTËSHI','SHTATËSHI','TETËSHI','NËNTËSHI','DHJETËSHI','FANTI','DAMA','MBRETI'],
+        suits:['MAÇA','KUPA','KARO','SPATHI'],
+        head:'DO TË ZGJEDHËSH',mid:function(r){return this.ranks[r]},bot:function(s){return this.suits[s]},
+        tag:'E vulosur në këtë video. Mos e hap.',
+        n1:'PARASHIKIMI IM',n2:'ËSHTË I VULOSUR KËTU',n3:'Nuk do ta ndryshoj kurrë.'},
+    it:{ranks:['ASSO','DUE','TRE','QUATTRO','CINQUE','SEI','SETTE','OTTO','NOVE','DIECI','FANTE','DONNA','RE'],
+        arts:["L'",'IL ','IL ','IL ','IL ','IL ','IL ',"L'",'IL ','IL ','IL ','LA ','IL '],
+        suits:['PICCHE','CUORI','QUADRI','FIORI'],
+        head:'SCEGLIERAI',mid:function(r){return this.arts[r]+this.ranks[r]},bot:function(s){return 'DI '+this.suits[s]},
+        tag:'Sigillato in questo video. Non aprire.',
+        n1:'LA MIA PREDIZIONE',n2:'È SIGILLATA QUI',n3:'Non la cambierò mai.'}
+  };
+  function L(){return LANGS[document.getElementById('lang').value]}
+
+  /* posizione carta (trascinabile quando c'è la foto) */
+  var cardPos={x:255,y:375,w:270,rot:-0.06},last=[6,0],dragging=false;
+  function redraw(){draw(last[0],last[1])}
+
+  var videoEl=null;
+  function pw(){return photo?(photo.videoWidth||photo.width):0}
+  function ph(){return photo?(photo.videoHeight||photo.height):0}
+  document.getElementById('photo').addEventListener('change',function(e){
+    var f=e.target.files[0];if(!f)return;
+    document.getElementById('vidCtrls').style.display='none';
+    if(f.type.indexOf('video')===0){
+      if(!videoEl){videoEl=document.createElement('video');videoEl.muted=true;videoEl.playsInline=true;
+        videoEl.addEventListener('seeked',redraw);}
+      videoEl.src=URL.createObjectURL(f);
+      videoEl.addEventListener('loadedmetadata',function once(){
+        videoEl.removeEventListener('loadedmetadata',once);
+        videoEl.currentTime=Math.min(1,videoEl.duration/2);
+        photo=videoEl;
+        document.getElementById('vidCtrls').style.display='flex';
+        document.getElementById('cardCtrls').style.display='flex';
+        status('video caricato ✓ — scegli il fotogramma, poi trascina la carta');
+      });
+      return;
+    }
+    var img=new Image();img.onload=function(){photo=img;
+      document.getElementById('cardCtrls').style.display='flex';
+      status('foto caricata ✓ — trascina la carta sopra quella vera');redraw();};
+    img.src=URL.createObjectURL(f);
+  });
+  document.getElementById('vScrub').addEventListener('input',function(){
+    if(videoEl&&videoEl.duration)videoEl.currentTime=this.value/1000*videoEl.duration;
+  });
+  document.getElementById('cScale').addEventListener('input',function(){cardPos.w=+this.value;redraw();});
+  document.getElementById('cRot').addEventListener('input',function(){cardPos.rot=+this.value*Math.PI/180;redraw();});
+  document.getElementById('cText').addEventListener('change',redraw);
+  function canvasXY(ev){
+    var r=cv.getBoundingClientRect();
+    return {x:(ev.clientX-r.left)*1280/r.width,y:(ev.clientY-r.top)*720/r.height};
+  }
+  cv.addEventListener('pointerdown',function(ev){
+    if(!photo)return;dragging=true;cv.setPointerCapture(ev.pointerId);
+    var p=canvasXY(ev);cardPos.x=p.x;cardPos.y=p.y;redraw();
+  });
+  cv.addEventListener('pointermove',function(ev){
+    if(!dragging)return;var p=canvasXY(ev);cardPos.x=p.x;cardPos.y=p.y;redraw();
+  });
+  cv.addEventListener('pointerup',function(){dragging=false});
+
+  function drawBG(){
+    if(photo){
+      var s=Math.max(1280/pw(),720/ph());
+      var w=pw()*s,h=ph()*s;
+      ctx.drawImage(photo,(1280-w)/2,(720-h)/2,w,h);
+      ctx.fillStyle='rgba(10,7,13,0.55)';ctx.fillRect(0,0,1280,720);
+    }else{
+      var g=ctx.createRadialGradient(640,860,100,640,860,900);
+      g.addColorStop(0,'#3d2c14');g.addColorStop(0.65,'#191411');g.addColorStop(1,'#0e0b10');
+      ctx.fillStyle=g;ctx.fillRect(0,0,1280,720);
+    }
+    ctx.fillStyle='rgba(201,162,39,0.9)';
+    ctx.fillRect(0,0,1280,6);ctx.fillRect(0,714,1280,6);
+  }
+
+  function drawCard(rl,suit,x,y,w,h,rot){
+    ctx.save();ctx.translate(x+w/2,y+h/2);ctx.rotate(rot);
+    ctx.shadowColor='rgba(0,0,0,0.7)';ctx.shadowBlur=40;ctx.shadowOffsetY=14;
+    ctx.fillStyle='#f6f1e4';
+    roundRect(-w/2,-h/2,w,h,18);ctx.fill();
+    ctx.shadowColor='transparent';
+    ctx.fillStyle=suit.red?'#c0242b':'#191919';
+    ctx.textAlign='center';
+    ctx.font='bold '+(h*0.155)+'px Georgia';
+    ctx.fillText(rl,-w/2+w*0.16,-h/2+h*0.17);
+    ctx.font=(h*0.13)+'px Georgia';
+    ctx.fillText(suit.sym,-w/2+w*0.16,-h/2+h*0.30);
+    ctx.font=(h*0.42)+'px Georgia';
+    ctx.fillText(suit.sym,0,h*0.15);
+    ctx.restore();
+  }
+  function roundRect(x,y,w,h,r){
+    ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);
+    ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();
+  }
+
+  function fitText(txt,x,y,maxW,baseFont){
+    ctx.font=baseFont;
+    var size=parseInt(baseFont.match(/(\d+)px/)[1],10);
+    while(ctx.measureText(txt).width>maxW&&size>36){
+      size-=4;ctx.font=baseFont.replace(/\d+px/,size+'px');
+    }
+    ctx.fillText(txt,x,y);
+  }
+  function showText(){return !photo||document.getElementById('cText').checked}
+  function draw(ri,si){
+    last=[ri,si];
+    var lg=L(),suit=SUITS[si];
+    drawBG();
+    var w=photo?cardPos.w:270,h=w*1.4445;
+    var cx=photo?cardPos.x:255,cy=photo?cardPos.y:375,rot=photo?cardPos.rot:-0.06;
+    drawCard(RANKL[ri],suit,cx-w/2,cy-h/2,w,h,rot);
+    if(!showText())return;
+    if(photo){
+      /* con la foto: testo compatto in alto, non copre la persona */
+      ctx.textAlign='center';
+      ctx.fillStyle='#efe9dc';ctx.font='600 44px Palatino, Georgia, serif';
+      ctx.fillText(lg.head,640,80);
+      ctx.fillStyle='#c9a227';
+      fitText(lg.mid(ri)+' · '+lg.bot(si),640,150,1100,'700 64px Palatino, Georgia, serif');
+      ctx.textAlign='left';
+      return;
+    }
+    ctx.textAlign='left';
+    ctx.fillStyle='#efe9dc';
+    ctx.font='600 54px Palatino, Georgia, serif';
+    ctx.fillText(lg.head,480,260);
+    ctx.fillStyle='#c9a227';
+    fitText(lg.mid(ri),480,370,740,'700 92px Palatino, Georgia, serif');
+    fitText(lg.bot(si),480,480,740,'700 92px Palatino, Georgia, serif');
+    ctx.fillStyle='rgba(239,233,220,0.75)';
+    ctx.font='italic 30px Palatino, Georgia, serif';
+    ctx.fillText(lg.tag,480,560);
+  }
+
+  function drawNeutral(){
+    var lg=L();
+    drawBG();
+    var w=photo?cardPos.w:270,h=w*1.4445;
+    var cx=photo?cardPos.x:255,cy=photo?cardPos.y:375,rot=photo?cardPos.rot:-0.06;
+    ctx.save();ctx.translate(cx,cy);ctx.rotate(rot);
+    ctx.shadowColor='rgba(0,0,0,0.7)';ctx.shadowBlur=40;ctx.shadowOffsetY=14;
+    ctx.fillStyle='#232634';roundRect(-w/2,-h/2,w,h,w*0.067);ctx.fill();
+    ctx.shadowColor='transparent';
+    ctx.strokeStyle='#c9a227';ctx.lineWidth=Math.max(2,w*0.011);
+    roundRect(-w/2*0.85,-h/2*0.9,w*0.85,h*0.9,w*0.044);ctx.stroke();
+    ctx.fillStyle='#c9a227';ctx.font=(w*0.55)+'px Georgia';ctx.textAlign='center';ctx.fillText('?',0,h*0.14);
+    ctx.restore();
+    if(photo){
+      ctx.textAlign='center';
+      ctx.fillStyle='#efe9dc';ctx.font='600 44px Palatino, Georgia, serif';
+      ctx.fillText(lg.n1+' — '+lg.n2,640,90);
+      ctx.textAlign='left';
+      return;
+    }
+    ctx.textAlign='left';
+    ctx.fillStyle='#efe9dc';ctx.font='600 54px Palatino, Georgia, serif';
+    ctx.fillText(lg.n1,480,300);
+    ctx.fillStyle='#c9a227';
+    fitText(lg.n2,480,410,740,'700 80px Palatino, Georgia, serif');
+    ctx.fillStyle='rgba(239,233,220,0.75)';ctx.font='italic 30px Palatino, Georgia, serif';
+    ctx.fillText(lg.n3,480,500);
+  }
+
+  document.getElementById('preview').onclick=function(){draw(6,0)};
+  document.getElementById('lang').addEventListener('change',function(){draw(6,0)});
+
+  document.getElementById('genAll').onclick=function(){
+    var lang=document.getElementById('lang').value;
+    var zip=new JSZip(),n=0,total=53;
+    var jobs=[];
+    RANKL.forEach(function(rl,ri){SUITS.forEach(function(s,si){jobs.push({ri:ri,si:si,file:rl+s.l+'.jpg'})})});
+    jobs.push({neutral:true,file:'NEUTRO.jpg'});
+    (function next(){
+      if(!jobs.length){
+        status('comprimo…');
+        zip.generateAsync({type:'blob'}).then(function(b){
+          var a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='miniature-'+lang+'.zip';a.click();
+          status('✓ zip scaricato — carica i file nel bucket in thumbs/<profilo>/'+lang+'/');
+        });
+        return;
+      }
+      var j=jobs.shift();
+      if(j.neutral)drawNeutral();else draw(j.ri,j.si);
+      cv.toBlob(function(b){zip.file(j.file,b);n++;status('genero… '+n+'/'+total);setTimeout(next,0);},'image/jpeg',0.92);
+    })();
+  };
+
+  document.getElementById('genIcons').onclick=function(){
+    [192,512].forEach(function(size){
+      var c=document.createElement('canvas');c.width=c.height=size;
+      var x=c.getContext('2d');
+      x.fillStyle='#000';x.fillRect(0,0,size,size);
+      var pad=size*0.18,bw=(size-pad*2)/4*0.9,gap=(size-pad*2)/4*0.1;
+      var colors=['#a5a5a5','#333','#333','#f1a33c'];
+      for(var row=0;row<4;row++)for(var col=0;col<4;col++){
+        x.fillStyle=col===3?colors[3]:(row===0?colors[0]:'#333');
+        x.beginPath();
+        x.arc(pad+col*(bw+gap)+bw/2,pad+row*(bw+gap)+bw/2,bw/2,0,7);x.fill();
+      }
+      c.toBlob(function(b){
+        var a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='icon-'+size+'.png';a.click();
+      },'image/png');
+    });
+    status('✓ icone scaricate — mettile nella cartella del progetto');
+  };
+
+  draw(6,0);
+})();
+</script>
+</body>
+</html>

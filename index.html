@@ -1,0 +1,366 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>Calcolatrice</title>
+<meta name="theme-color" content="#000000">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+  :root{
+    --ground:#131016;--surface:#1c1722;--line:#332a3e;--ink:#efe9dc;
+    --muted:#9a8fa6;--brass:#c9a227;--brass-soft:#c9a22733;--ok:#4caf7d;--err:#e05c63;
+    --mono:ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+    --serif:'Iowan Old Style','Palatino Linotype',Palatino,Georgia,serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{background:#000;color:var(--ink);font-family:var(--sans);overscroll-behavior:none}
+  .screen{display:none;min-height:100dvh;flex-direction:column}
+  .screen.on{display:flex}
+  button{font-family:inherit;cursor:pointer}
+
+  /* ---------- CALCOLATRICE ---------- */
+  #calc{background:#000;justify-content:flex-end;padding:16px 12px calc(20px + env(safe-area-inset-bottom))}
+  #calcDisp{color:#fff;font-size:17vw;font-weight:200;text-align:right;padding:0 12px 18px;
+    white-space:nowrap;overflow:hidden}
+  @media(min-width:500px){#calcDisp{font-size:72px}}
+  .cgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;max-width:420px;width:100%;margin:0 auto}
+  .cgrid button{aspect-ratio:1;border-radius:50%;border:none;font-size:clamp(20px,7vw,30px);color:#fff;background:#333;transition:filter .1s}
+  .cgrid button:active{filter:brightness(1.7)}
+  .cgrid .fn{background:#a5a5a5;color:#000}
+  .cgrid .op{background:#f1a33c}
+  .cgrid .zero{grid-column:span 2;aspect-ratio:auto;border-radius:99px;text-align:left;padding-left:8.5%}
+
+  /* ---------- CONSOLE ---------- */
+  #console{background:linear-gradient(180deg,#181320,#0e0b12);padding:calc(14px + env(safe-area-inset-top)) 16px calc(16px + env(safe-area-inset-bottom));gap:13px;max-width:480px;margin:0 auto;width:100%}
+  .chead{display:flex;align-items:center;justify-content:space-between}
+  .brand{font-family:var(--serif);font-size:18px;letter-spacing:.08em}
+  .brand span{color:var(--brass)}
+  .chead .r{display:flex;gap:8px;align-items:center}
+  .iconbtn{background:var(--surface);border:1px solid var(--line);color:var(--muted);border-radius:9px;
+    padding:7px 11px;font-size:14px}
+  .mods{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .mod{border:1px solid var(--line);background:var(--surface);border-radius:11px;padding:10px 12px;text-align:left;color:var(--ink)}
+  .mod small{display:block;font-family:var(--mono);font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-top:2px}
+  .mod b{font-size:14.5px}
+  .mod.sel{border-color:var(--brass);background:var(--brass-soft)}
+  .mod.sel small{color:var(--brass)}
+  .plabel{font-family:var(--mono);font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:var(--muted);margin-bottom:7px}
+  .ranks{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+  .suits{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:8px}
+  .pick{border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:8px;padding:9px 0;font-size:14px;text-align:center}
+  .pick.sel{border-color:var(--brass);background:var(--brass-soft);color:var(--brass);font-weight:700}
+  .suits .pick{font-size:19px}
+  .pick.red{color:#e05c63}.pick.red.sel{color:#ff8a90}
+  input[type=text],input[type=password],input[type=url]{width:100%;background:var(--surface);border:1px solid var(--line);
+    border-radius:9px;padding:11px 13px;color:var(--ink);font-size:15px}
+  input:focus{outline:2px solid var(--brass);outline-offset:-1px}
+  .microw{display:flex;align-items:center;gap:10px}
+  .micbtn{flex:1;border:1px dashed var(--line);background:transparent;color:var(--muted);border-radius:10px;padding:11px;font-size:14px}
+  .micbtn.live{border:1px solid var(--ok);color:var(--ok);animation:pulse 1.4s infinite}
+  @keyframes pulse{50%{opacity:.55}}
+  .go{background:var(--brass);color:#17120a;border:none;border-radius:11px;padding:15px;font-size:16px;font-weight:800;letter-spacing:.05em}
+  .go:disabled{opacity:.3}
+  .ghost{background:transparent;border:1px solid var(--line);color:var(--muted);border-radius:11px;padding:11px;font-size:13px}
+  #log{font-family:var(--mono);font-size:10.5px;color:var(--muted);line-height:1.75;min-height:64px;max-height:130px;overflow-y:auto}
+  #log .ok{color:var(--ok)}#log .err{color:var(--err)}#log .act{color:var(--brass)}
+  .spacer{flex:1}
+
+  /* ---------- IMPOSTAZIONI ---------- */
+  #settings{background:var(--ground);padding:calc(14px + env(safe-area-inset-top)) 16px 30px;gap:14px;max-width:480px;margin:0 auto;width:100%}
+  .srow label{display:block;font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+  .btnrow{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .linkbtn{background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:12px;font-size:13.5px}
+  h2{font-family:var(--serif);font-size:20px;font-weight:600}
+  .shead{display:flex;justify-content:space-between;align-items:center}
+</style>
+</head>
+<body>
+
+<!-- ============ CALCOLATRICE ============ -->
+<div class="screen calc on" id="calc">
+  <div id="calcDisp">0</div>
+  <div class="cgrid" id="cgrid">
+    <button class="fn" id="secretC">C</button><button class="fn">±</button><button class="fn">%</button><button class="op">÷</button>
+    <button>7</button><button>8</button><button>9</button><button class="op">×</button>
+    <button>4</button><button>5</button><button>6</button><button class="op">−</button>
+    <button>1</button><button>2</button><button>3</button><button class="op">+</button>
+    <button class="zero">0</button><button>,</button><button class="op">=</button>
+  </div>
+</div>
+
+<!-- ============ CONSOLE ============ -->
+<div class="screen" id="console">
+  <div class="chead">
+    <div class="brand">VERIFY<span>.</span></div>
+    <div class="r">
+      <button class="iconbtn" id="btnSettings">⚙︎</button>
+      <button class="iconbtn" id="btnLock">✕</button>
+    </div>
+  </div>
+
+  <div class="mods" id="modPicker">
+    <button class="mod sel" data-mod="oracolo"><b>Oracolo</b><small>YouTube</small></button>
+    <button class="mod" data-mod="prophet"><b>Prophet</b><small>Spotify</small></button>
+  </div>
+
+  <div id="cardArea">
+    <div class="plabel">Carta nominata</div>
+    <div class="ranks" id="ranks"></div>
+    <div class="suits" id="suits"></div>
+  </div>
+
+  <div id="songArea" style="display:none">
+    <div class="plabel">Brano nominato</div>
+    <input type="text" id="songInput" placeholder="titolo (e artista se serve)" autocomplete="off">
+  </div>
+
+  <div class="microw">
+    <button class="micbtn" id="micBtn">🎙️ Ascolto vocale</button>
+  </div>
+
+  <div id="log">&gt; pronto.</div>
+  <div class="spacer"></div>
+  <button class="go" id="goBtn" disabled>ESEGUI</button>
+  <button class="ghost" id="resetBtn">Ripristina neutro (dopo lo show)</button>
+</div>
+
+<!-- ============ IMPOSTAZIONI ============ -->
+<div class="screen" id="settings">
+  <div class="shead"><h2>Impostazioni</h2><button class="iconbtn" id="btnBack">← Console</button></div>
+  <div class="srow"><label>URL backend (https://xxxx.supabase.co)</label><input type="url" id="cfgUrl" placeholder="https://xxxx.supabase.co"></div>
+  <div class="srow"><label>PIN</label><input type="password" id="cfgPin" inputmode="numeric"></div>
+  <div class="srow"><label>Nome profilo (= cartella miniature)</label><input type="text" id="cfgProfile" placeholder="es. nik" autocapitalize="none"></div>
+  <div class="srow"><label>ID video YouTube</label><input type="text" id="cfgVideo" placeholder="es. dQw4w9WgXcQ" autocapitalize="none"></div>
+  <div class="srow"><label>ID playlist Spotify</label><input type="text" id="cfgPlaylist" placeholder="(vuoto: usa «Crea playlist»)" autocapitalize="none"></div>
+  <div class="srow"><label>Lingua rivelazioni</label>
+    <select id="cfgLang" style="width:100%;background:var(--surface);border:1px solid var(--line);border-radius:9px;padding:11px 13px;color:var(--ink);font-size:15px">
+      <option value="en">English</option>
+      <option value="sq">Shqip</option>
+      <option value="it">Italiano</option>
+    </select>
+  </div>
+  <div class="btnrow">
+    <button class="linkbtn" id="linkGoogle">🔗 Collega YouTube</button>
+    <button class="linkbtn" id="linkSpotify">🔗 Collega Spotify</button>
+    <button class="linkbtn" id="mkPlaylist">＋ Crea playlist «Prediction»</button>
+    <button class="linkbtn" id="saveCfg">💾 Salva</button>
+  </div>
+  <div id="slog" style="font-family:var(--mono);font-size:10.5px;color:var(--muted);line-height:1.7"></div>
+</div>
+
+<script>
+(function(){
+  'use strict';
+  var $=function(id){return document.getElementById(id)};
+  var LS='verify_cfg';
+  var cfg=JSON.parse(localStorage.getItem(LS)||'{}');
+  var state={mod:'oracolo',rank:null,suit:null,running:false};
+
+  var SUITS=[{l:'S',sym:'♠',red:false},{l:'H',sym:'♥',red:true},{l:'D',sym:'♦',red:true},{l:'C',sym:'♣',red:false}];
+  var RANKL=['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+  var LANGS={
+    en:{label:'English',mic:'en-US',
+      ranks:['Ace','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Jack','Queen','King'],
+      rankWords:[['ace'],['two'],['three'],['four'],['five'],['six'],['seven'],['eight'],['nine'],['ten'],['jack'],['queen'],['king']],
+      suits:['Spades','Hearts','Diamonds','Clubs'],
+      suitWords:[['spades','spade'],['hearts','heart'],['diamonds','diamond'],['clubs','club']],
+      title:function(r,s){return 'You will choose the '+this.ranks[r]+' of '+this.suits[s]+'. Sealed — do not open.';},
+      neutral:'I sealed a prediction inside this video'},
+    sq:{label:'Shqip',mic:'sq-AL',
+      ranks:['Asi','Dyshi','Treshi','Katërshi','Pesëshi','Gjashtëshi','Shtatëshi','Tetëshi','Nëntëshi','Dhjetëshi','Fanti','Dama','Mbreti'],
+      rankWords:[['as','asi'],['dy','dyshi'],['tre','treshi'],['katër','kater','katërshi'],['pesë','pese','pesëshi'],
+        ['gjashtë','gjashte','gjashtëshi'],['shtatë','shtate','shtatëshi'],['tetë','tete','tetëshi'],
+        ['nëntë','nente','nëntëshi'],['dhjetë','dhjete','dhjetëshi'],['fanti','fant'],['dama','çupa'],['mbreti','mbret']],
+      suits:['Maça','Kupa','Karo','Spathi'],
+      suitWords:[['maça','maca','maç'],['kupa','kupë'],['karo'],['spathi','spath']],
+      title:function(r,s){return 'Do të zgjedhësh: '+this.ranks[r]+' '+this.suits[s]+'. E vulosur — mos e hap.';},
+      neutral:'Kam vulosur një parashikim në këtë video'},
+    it:{label:'Italiano',mic:'it-IT',
+      ranks:['Asso','Due','Tre','Quattro','Cinque','Sei','Sette','Otto','Nove','Dieci','Fante','Donna','Re'],
+      rankWords:[['asso'],['due'],['tre'],['quattro'],['cinque'],['sei'],['sette'],['otto'],['nove'],['dieci'],
+        ['fante','jack'],['donna','regina'],['re']],
+      suits:['Picche','Cuori','Quadri','Fiori'],
+      suitWords:[['picche'],['cuori','cuore'],['quadri','quadro'],['fiori','fiore']],
+      art:["l'",'il ','il ','il ','il ','il ','il ',"l'",'il ','il ','il ','la ','il '],
+      title:function(r,s){return 'Sceglierai '+this.art[r]+this.ranks[r]+' di '+this.suits[s]+'. Sigillato — non aprire.';},
+      neutral:'Ho sigillato una predizione in questo video'}
+  };
+  function L(){return LANGS[cfg.lang]||LANGS.en;}
+  function cardTitle(ri,si){return L().title(ri,si);}
+
+  /* ---------- navigazione schermi ---------- */
+  function show(id){['calc','console','settings'].forEach(function(s){$(s).classList.toggle('on',s===id)});}
+  $('btnSettings').onclick=function(){loadCfgUI();show('settings')};
+  $('btnBack').onclick=function(){show('console')};
+  $('btnLock').onclick=function(){stopMic();show('calc')};
+
+  /* ---------- calcolatrice ---------- */
+  var disp=$('calcDisp'),cur='0';
+  $('cgrid').addEventListener('click',function(e){
+    var b=e.target.closest('button');if(!b||b.id==='secretC')return;
+    var t=b.textContent;
+    if(/[0-9]/.test(t)){cur=(cur==='0'?t:cur+t).slice(0,10);disp.textContent=cur;}
+    else if(t===','){if(cur.indexOf('.')<0){cur+='.';disp.textContent=cur.replace('.',',');}}
+    else if(t==='±'){cur=cur.charAt(0)==='-'?cur.slice(1):'-'+cur;disp.textContent=cur;}
+    else if(t==='%'){cur=String(parseFloat(cur)/100||0);disp.textContent=cur;}
+    else if(t==='='){
+      try{cur=String(Function('"use strict";return('+cur.replace(/×/g,'*').replace(/÷/g,'/').replace(/−/g,'-')+')')());}
+      catch(_){cur='0'}
+      if(cur.length>10)cur=String(parseFloat(cur).toPrecision(8));
+      disp.textContent=cur;
+    }
+    else if('÷×−+'.indexOf(t)>=0&&cur.length<9){cur+=t;disp.textContent=cur;}
+  });
+  /* long-press segreto su C */
+  var sb=$('secretC'),timer=null;
+  function startHold(ev){ev.preventDefault();
+    timer=setTimeout(function(){timer=null;show('console');},900);}
+  function endHold(){if(timer){clearTimeout(timer);timer=null;}cur='0';disp.textContent='0';}
+  sb.addEventListener('pointerdown',startHold);
+  sb.addEventListener('pointerup',endHold);
+  sb.addEventListener('pointerleave',endHold);
+  sb.addEventListener('contextmenu',function(e){e.preventDefault()});
+
+  /* ---------- pickers ---------- */
+  var ranksEl=$('ranks'),suitsEl=$('suits');
+  RANKL.forEach(function(rl,i){var b=document.createElement('button');b.className='pick';b.textContent=rl;
+    b.onclick=function(){state.rank=i;sel(ranksEl,b);ready();};ranksEl.appendChild(b);});
+  SUITS.forEach(function(s,i){var b=document.createElement('button');b.className='pick'+(s.red?' red':'');b.textContent=s.sym;
+    b.onclick=function(){state.suit=i;sel(suitsEl,b);ready();};suitsEl.appendChild(b);});
+  function sel(box,btn){box.querySelectorAll('.pick').forEach(function(x){x.classList.remove('sel')});btn.classList.add('sel');}
+  $('songInput').addEventListener('input',ready);
+
+  $('modPicker').addEventListener('click',function(e){
+    var m=e.target.closest('.mod');if(!m||state.running)return;
+    state.mod=m.dataset.mod;
+    this.querySelectorAll('.mod').forEach(function(x){x.classList.remove('sel')});m.classList.add('sel');
+    $('cardArea').style.display=state.mod==='oracolo'?'':'none';
+    $('songArea').style.display=state.mod==='prophet'?'':'none';
+    ready();
+  });
+
+  function ready(){
+    var ok=state.mod==='prophet'?$('songInput').value.trim().length>1:(state.rank!==null&&state.suit!==null);
+    $('goBtn').disabled=!ok||state.running;
+  }
+
+  /* ---------- log ---------- */
+  var log=$('log');
+  function line(html){var d=document.createElement('div');d.innerHTML='&gt; '+html;log.appendChild(d);log.scrollTop=1e5;}
+
+  /* ---------- backend ---------- */
+  function api(fn,body){
+    if(!cfg.url||!cfg.pin){line('<span class="err">configura URL backend e PIN in ⚙︎</span>');return Promise.reject('cfg');}
+    body.pin=cfg.pin;body.profile=cfg.profile||'';
+    return fetch(cfg.url.replace(/\/$/,'')+'/functions/v1/'+fn,{
+      method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)
+    }).then(function(r){return r.json()});
+  }
+
+  function execute(){
+    if(state.running)return;
+    var p;
+    if(state.mod==='oracolo'){
+      var lg=L();
+      line('carta: <span class="act">'+lg.ranks[state.rank]+' / '+lg.suits[state.suit]+'</span>');
+      p=api('oracolo',{video_id:cfg.video,lang:cfg.lang||'en',
+        card:RANKL[state.rank]+SUITS[state.suit].l,title:cardTitle(state.rank,state.suit)});
+    }else{
+      var q=$('songInput').value.trim();
+      line('brano: <span class="act">'+q.replace(/</g,'&lt;')+'</span>');
+      p=api('prophet',{playlist_id:cfg.playlist,query:q});
+    }
+    state.running=true;$('goBtn').disabled=true;line('invio…');
+    p.then(function(j){
+      if(j.ok){line('<span class="ok">✓ fatto'+(j.ms?' ('+(j.ms/1000).toFixed(1)+' s)':'')+(j.track?' — '+j.track:'')+'</span> falli verificare.');
+        if(navigator.vibrate)navigator.vibrate([80,60,80]);}
+      else line('<span class="err">✗ '+String(j.error).replace(/</g,'&lt;')+'</span>');
+    }).catch(function(e){line('<span class="err">✗ '+String(e)+'</span>');})
+      .finally(function(){state.running=false;ready();});
+  }
+  $('goBtn').onclick=execute;
+
+  $('resetBtn').onclick=function(){
+    if(state.running)return;
+    state.running=true;line('ripristino neutro…');
+    api('oracolo',{video_id:cfg.video,lang:cfg.lang||'en',card:'NEUTRO',title:L().neutral})
+      .then(function(j){line(j.ok?'<span class="ok">✓ video neutro</span>':'<span class="err">✗ '+j.error+'</span>');})
+      .catch(function(e){line('<span class="err">✗ '+e+'</span>')})
+      .finally(function(){state.running=false;ready();});
+  };
+
+  /* ---------- microfono ---------- */
+  var rec=null,micOn=false;
+  function stopMic(){if(rec){try{rec.stop()}catch(_){}rec=null;}micOn=false;$('micBtn').classList.remove('live');
+    $('micBtn').textContent='🎙️ Ascolto vocale';}
+  $('micBtn').onclick=function(){
+    if(micOn){stopMic();return;}
+    var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+    if(!SR){line('<span class="err">riconoscimento vocale non supportato su questo browser (usa il picker)</span>');return;}
+    var lg=L();
+    rec=new SR();rec.lang=lg.mic;rec.continuous=true;rec.interimResults=true;
+    rec.onresult=function(ev){
+      var txt='';for(var i=0;i<ev.results.length;i++)txt+=ev.results[i][0].transcript+' ';
+      txt=txt.toLowerCase();
+      var ri=-1,si=-1;
+      lg.rankWords.forEach(function(ws,i){ws.forEach(function(w){
+        if(new RegExp('(^|\\s)'+w+'($|\\s)').test(txt))ri=i;});});
+      lg.suitWords.forEach(function(ws,i){ws.forEach(function(w){
+        if(txt.indexOf(w)>=0)si=i;});});
+      if(ri>=0&&si>=0){
+        state.rank=ri;state.suit=si;
+        sel(ranksEl,ranksEl.children[ri]);sel(suitsEl,suitsEl.children[si]);
+        stopMic();ready();
+        line('🎙️ sentito: <span class="act">'+lg.ranks[ri]+' / '+lg.suits[si]+'</span>');
+        execute();
+      }
+    };
+    rec.onerror=function(e){line('<span class="err">mic: '+e.error+'</span>');stopMic();};
+    rec.onend=function(){if(micOn){try{rec.start()}catch(_){stopMic();}}};
+    try{rec.start();micOn=true;$('micBtn').classList.add('live');$('micBtn').textContent='🎙️ In ascolto… (tocca per fermare)';
+      line('🎙️ ascolto attivo — fai nominare la carta ad alta voce');}
+    catch(e){line('<span class="err">mic: '+e+'</span>');}
+  };
+
+  /* ---------- impostazioni ---------- */
+  function loadCfgUI(){
+    $('cfgUrl').value=cfg.url||'';$('cfgPin').value=cfg.pin||'';
+    $('cfgProfile').value=cfg.profile||'';$('cfgVideo').value=cfg.video||'';
+    $('cfgPlaylist').value=cfg.playlist||'';$('cfgLang').value=cfg.lang||'en';
+  }
+  function slog(m){$('slog').innerHTML+='&gt; '+m+'<br>';}
+  $('saveCfg').onclick=function(){
+    cfg={url:$('cfgUrl').value.trim(),pin:$('cfgPin').value.trim(),
+      profile:$('cfgProfile').value.trim().toLowerCase(),
+      video:$('cfgVideo').value.trim(),playlist:$('cfgPlaylist').value.trim(),
+      lang:$('cfgLang').value};
+    localStorage.setItem(LS,JSON.stringify(cfg));slog('<span style="color:var(--ok)">✓ salvato</span>');
+  };
+  function oauthOpen(provider){
+    $('saveCfg').onclick();
+    if(!cfg.url||!cfg.pin||!cfg.profile){slog('<span style="color:var(--err)">compila URL, PIN e profilo prima</span>');return;}
+    var u=cfg.url.replace(/\/$/,'')+'/functions/v1/oauth?action=start&provider='+provider+
+      '&profile='+encodeURIComponent(cfg.profile)+'&pin='+encodeURIComponent(cfg.pin);
+    window.open(u,'_blank');
+  }
+  $('linkGoogle').onclick=function(){oauthOpen('google')};
+  $('linkSpotify').onclick=function(){oauthOpen('spotify')};
+  $('mkPlaylist').onclick=function(){
+    $('saveCfg').onclick();
+    api('prophet',{action:'create_playlist'}).then(function(j){
+      if(j.playlist_id){cfg.playlist=j.playlist_id;localStorage.setItem(LS,JSON.stringify(cfg));
+        $('cfgPlaylist').value=j.playlist_id;slog('<span style="color:var(--ok)">✓ playlist creata: '+j.playlist_id+'</span>');}
+      else slog('<span style="color:var(--err)">✗ '+j.error+'</span>');
+    }).catch(function(e){slog('<span style="color:var(--err)">✗ '+e+'</span>')});
+  };
+
+  /* ---------- service worker ---------- */
+  if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(function(){});
+})();
+</script>
+</body>
+</html>
