@@ -359,15 +359,21 @@
     $('cfgPlaylist').value=cfg.playlist||'';$('cfgLang').value=cfg.lang||'en';
   }
   function slog(m){$('slog').innerHTML+='&gt; '+m+'<br>';}
-  $('saveCfg').onclick=function(){
+  function saveNow(){
     cfg={url:$('cfgUrl').value.trim(),pin:$('cfgPin').value.trim(),
       profile:$('cfgProfile').value.trim().toLowerCase(),
       video:$('cfgVideo').value.trim(),playlist:$('cfgPlaylist').value.trim(),
       lang:$('cfgLang').value};
-    localStorage.setItem(LS,JSON.stringify(cfg));slog('<span style="color:var(--ok)">✓ salvato</span>');
-  };
+    localStorage.setItem(LS,JSON.stringify(cfg));
+  }
+  /* auto-salvataggio: ogni digitazione o incolla salva subito */
+  ['cfgUrl','cfgPin','cfgProfile','cfgVideo','cfgPlaylist','cfgLang'].forEach(function(id){
+    $(id).addEventListener('input',saveNow);
+    $(id).addEventListener('change',saveNow);
+  });
+  $('saveCfg').onclick=function(){saveNow();slog('<span style="color:var(--ok)">✓ salvato</span>');};
   function oauthOpen(provider){
-    $('saveCfg').onclick();
+    saveNow();
     if(!cfg.url||!cfg.pin||!cfg.profile){slog('<span style="color:var(--err)">compila URL, PIN e profilo prima</span>');return;}
     var u=cfg.url.replace(/\/$/,'')+'/functions/v1/oauth?action=start&provider='+provider+
       '&profile='+encodeURIComponent(cfg.profile)+'&pin='+encodeURIComponent(cfg.pin);
@@ -376,7 +382,7 @@
   $('linkGoogle').onclick=function(){oauthOpen('google')};
   $('linkSpotify').onclick=function(){oauthOpen('spotify')};
   $('mkPlaylist').onclick=function(){
-    $('saveCfg').onclick();
+    saveNow();
     api('prophet',{action:'create_playlist'}).then(function(j){
       if(j.playlist_id){cfg.playlist=j.playlist_id;localStorage.setItem(LS,JSON.stringify(cfg));
         $('cfgPlaylist').value=j.playlist_id;slog('<span style="color:var(--ok)">✓ playlist creata: '+j.playlist_id+'</span>');}
