@@ -78,6 +78,7 @@ Deno.serve(async (req) => {
       const data = rows[0]?.data ?? {};
       data.mosaic_card = String(body.card ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
       if (body.cols) data.mosaic_cols = Number(body.cols);
+      if (body.total != null && body.total !== "") data.mosaic_total = Number(body.total);
       const r1 = await fetch(`${env("SUPABASE_URL")}/rest/v1/verify_config`, {
         method: "POST",
         headers: { ...H(), Prefer: "resolution=merge-duplicates" },
@@ -102,7 +103,7 @@ Deno.serve(async (req) => {
 
     // allineamento a "Recenti": se il rullino ha già N foto, aggiungi tessere di
     // riempimento (colore sfondo) finché il blocco parte a inizio riga
-    const total = Number(q.get("total") ?? -1);
+    const total = Number(q.get("total") ?? data.mosaic_total ?? -1);
     let pad = 0;
     if (total >= 0) {
       pad = (Number(cols) - (total % Number(cols))) % Number(cols);

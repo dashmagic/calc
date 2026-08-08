@@ -146,6 +146,7 @@
   <div class="srow"><label>Nome profilo (= cartella miniature)</label><input type="text" id="cfgProfile" placeholder="es. nik" autocapitalize="none"></div>
   <div class="srow"><label>ID video YouTube</label><input type="text" id="cfgVideo" placeholder="es. dQw4w9WgXcQ" autocapitalize="none"></div>
   <div class="srow"><label>ID playlist Spotify</label><input type="text" id="cfgPlaylist" placeholder="(vuoto: usa «Crea playlist»)" autocapitalize="none"></div>
+  <div class="srow"><label>Foto nel rullino (per Mosaic — è scritto in fondo all'app Foto)</label><input type="text" id="cfgTotal" inputmode="numeric" placeholder="es. 4803"></div>
   <div class="srow"><label>Lingua rivelazioni</label>
     <select id="cfgLang" style="width:100%;background:var(--surface);border:1px solid var(--line);border-radius:9px;padding:11px 13px;color:var(--ink);font-size:15px">
       <option value="en">English</option>
@@ -308,7 +309,7 @@
     }else if(state.mod==='mosaic'){
       var lg2=L();
       line('mosaico: <span class="act">'+lg2.ranks[state.rank]+' / '+lg2.suits[state.suit]+'</span>');
-      p=api('mosaic',{action:'arm',card:RANKL[state.rank]+SUITS[state.suit].l})
+      p=api('mosaic',{action:'arm',card:RANKL[state.rank]+SUITS[state.suit].l,total:cfg.total||null})
         .then(function(j){
           if(j.ok){
             line('🃏 armato — avvio il Comando Rapido «Sync»…');
@@ -377,14 +378,14 @@
   function loadCfgUI(){
     $('cfgUrl').value=cfg.url||'';$('cfgPin').value=cfg.pin||'';
     $('cfgProfile').value=cfg.profile||'';$('cfgVideo').value=cfg.video||'';
-    $('cfgPlaylist').value=cfg.playlist||'';$('cfgLang').value=cfg.lang||'en';
+    $('cfgPlaylist').value=cfg.playlist||'';$('cfgTotal').value=cfg.total||'';$('cfgLang').value=cfg.lang||'en';
   }
   function slog(m){$('slog').innerHTML+='&gt; '+m+'<br>';}
   function saveNow(){
     cfg={url:$('cfgUrl').value.trim(),pin:$('cfgPin').value.trim(),
       profile:$('cfgProfile').value.trim().toLowerCase(),
       video:$('cfgVideo').value.trim(),playlist:$('cfgPlaylist').value.trim(),
-      lang:$('cfgLang').value};
+      total:$('cfgTotal').value.trim(),lang:$('cfgLang').value};
     localStorage.setItem(LS,JSON.stringify(cfg));
     clearTimeout(pushT);pushT=setTimeout(cloudPush,1200);
   }
@@ -395,7 +396,7 @@
     fetch(cfg.url.replace(/\/$/,'')+'/functions/v1/config',{method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({pin:cfg.pin,profile:cfg.profile,action:'set',
-        data:{video:cfg.video||'',playlist:cfg.playlist||'',lang:cfg.lang||'en'}})}).catch(function(){});
+        data:{video:cfg.video||'',playlist:cfg.playlist||'',total:cfg.total||'',lang:cfg.lang||'en'}})}).catch(function(){});
   }
   function cloudPull(){
     if(!cfg.url||!cfg.pin||!cfg.profile)return;
@@ -405,7 +406,7 @@
       .then(function(r){return r.json()}).then(function(j){
         if(!j||!j.data)return;
         var ch=false;
-        ['video','playlist','lang'].forEach(function(k){
+        ['video','playlist','total','lang'].forEach(function(k){
           if(j.data[k]&&!cfg[k]){cfg[k]=j.data[k];ch=true;}});
         if(ch){localStorage.setItem(LS,JSON.stringify(cfg));loadCfgUI();
           slog('<span style="color:var(--ok)">☁️ impostazioni recuperate dal cloud</span>');}
@@ -413,7 +414,7 @@
   }
   $('cfgPin').addEventListener('change',cloudPull);
   /* auto-salvataggio: ogni digitazione o incolla salva subito */
-  ['cfgUrl','cfgPin','cfgProfile','cfgVideo','cfgPlaylist','cfgLang'].forEach(function(id){
+  ['cfgUrl','cfgPin','cfgProfile','cfgVideo','cfgPlaylist','cfgTotal','cfgLang'].forEach(function(id){
     $(id).addEventListener('input',saveNow);
     $(id).addEventListener('change',saveNow);
   });
