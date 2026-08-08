@@ -59,7 +59,8 @@
   function irisScreen(){return {x:IRIS_X*fit.s,y:IRIS_Y*fit.s,r:IRIS_R*fit.s};}
 
   function draw(){
-    if(!portrait.complete)return;
+    requestAnimationFrame(draw);
+    if(!portrait.complete||!portrait.naturalWidth)return;
     g.clearRect(0,0,cv.width,cv.height);
     g.drawImage(portrait,0,0,cv.width,cv.height);
     if(lens.active){
@@ -99,7 +100,6 @@
       g.lineWidth=1;g.strokeStyle='rgba(255,255,255,.25)';
       g.beginPath();g.arc(lens.x,lens.y,r-2,0,7);g.stroke();
     }
-    requestAnimationFrame(draw);
   }
 
   function pt(e){var r=cv.getBoundingClientRect();var t=e.touches?e.touches[0]:e;
