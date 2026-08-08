@@ -115,6 +115,7 @@
     <button class="mod sel" data-mod="oracolo"><b>Oracolo</b><small>YouTube</small></button>
     <button class="mod" data-mod="prophet"><b>Prophet</b><small>Spotify</small></button>
     <button class="mod" data-mod="mosaic"><b>Mosaic</b><small>Rullino foto</small></button>
+    <button class="mod" data-mod="site"><b>Sito</b><small>bushishow.com</small></button>
   </div>
 
   <div id="cardArea">
@@ -317,6 +318,15 @@
           }
           return j;
         });
+    }else if(state.mod==='site'){
+      var lg3=L();
+      line('sito: <span class="act">'+lg3.ranks[state.rank]+' / '+lg3.suits[state.suit]+'</span>');
+      var now=new Date();
+      var ts=now.toLocaleDateString((cfg.lang||'en')+'-'+((cfg.lang||'en')==='en'?'US':(cfg.lang||'en').toUpperCase()),
+        {day:'numeric',month:'long',year:'numeric'})+' · '+
+        now.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+      p=api('site',{action:'arm',card:RANKL[state.rank]+SUITS[state.suit].l,lang:cfg.lang||'en',ts:ts,ttl:180})
+        .then(function(j){if(j.ok)line('🌐 sito armato per 3 min — «apri il mio sito»');return j;});
     }else{
       var q=$('songInput').value.trim();
       line('brano: <span class="act">'+q.replace(/</g,'&lt;')+'</span>');
