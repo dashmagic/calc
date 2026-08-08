@@ -351,50 +351,61 @@
       .finally(function(){state.running=false;ready();});
   };
 
-  /* ---------- microfono: registra ~4s → Groq/Whisper → carta ---------- */
-  var mediaRec=null,micOn=false,micStream=null;
+  /* ---------- microfono: ASCOLTO CONTINUO — agisce SOLO quando sente una carta ---------- */
+  var micOn=false,micStream=null,chunkRec=null,lastArm=0,lastCode='';
+  var CHUNK_MS=3800;
   function stopMic(){
-    if(mediaRec&&mediaRec.state!=='inactive'){try{mediaRec.stop()}catch(_){}}
+    micOn=false;
+    if(chunkRec&&chunkRec.state!=='inactive'){try{chunkRec.stop()}catch(_){}}
     if(micStream){micStream.getTracks().forEach(function(t){t.stop()});micStream=null;}
-    micOn=false;$('micBtn').classList.remove('live');$('micBtn').textContent='🎙️ Ascolto vocale';
+    $('micBtn').classList.remove('live');$('micBtn').textContent='🎙️ Ascolto continuo';
+  }
+  function mimeType(){
+    return MediaRecorder.isTypeSupported('audio/mp4')?'audio/mp4':
+           (MediaRecorder.isTypeSupported('audio/webm')?'audio/webm':'');
+  }
+  function recordChunk(){
+    if(!micOn||!micStream)return;
+    var mime=mimeType();
+    chunkRec=mime?new MediaRecorder(micStream,{mimeType:mime}):new MediaRecorder(micStream);
+    var chunks=[];
+    chunkRec.ondataavailable=function(e){if(e.data.size)chunks.push(e.data);};
+    chunkRec.onstop=function(){
+      var blob=new Blob(chunks,{type:chunkRec.mimeType||'audio/mp4'});
+      if(micOn)recordChunk();                 // riparte subito col prossimo pezzo
+      if(blob.size<1200)return;               // silenzio → ignora
+      fetch(cfg.url.replace(/\/$/,'')+'/functions/v1/listen?pin='+encodeURIComponent(cfg.pin)+
+        '&lang='+(cfg.lang||'it'),
+        {method:'POST',headers:{'Content-Type':'application/octet-stream'},body:blob})
+        .then(function(r){return r.json()}).then(function(j){
+          if(!j||j.error)return;
+          // carta trovata? arma. Altrimenti (chiacchiere) → ignora in silenzio.
+          if(j.card&&j.rank>=0&&j.suit>=0){
+            var now=Date.now();
+            if(j.card===lastCode&&now-lastArm<6000)return;  // no doppioni
+            lastCode=j.card;lastArm=now;
+            state.rank=j.rank;state.suit=j.suit;
+            sel(ranksEl,ranksEl.children[j.rank]);sel(suitsEl,suitsEl.children[j.suit]);
+            ready();var lg=L();
+            line('🎙️ <span class="act">'+lg.ranks[j.rank]+' / '+lg.suits[j.suit]+'</span> — armo…');
+            if(navigator.vibrate)navigator.vibrate([60,50,60]);
+            execute();
+          }
+        }).catch(function(){});
+    };
+    try{chunkRec.start();}catch(_){return;}
+    setTimeout(function(){if(chunkRec&&chunkRec.state!=='inactive')chunkRec.stop();},CHUNK_MS);
   }
   $('micBtn').onclick=function(){
-    if(micOn){stopMic();return;}
+    if(micOn){stopMic();line('🎙️ ascolto fermato');return;}
     if(!navigator.mediaDevices||!window.MediaRecorder){
       line('<span class="err">microfono non disponibile — usa i pulsanti carta</span>');return;}
-    line('🎙️ chiedo il microfono…');
-    navigator.mediaDevices.getUserMedia({audio:true}).then(function(stream){
-      micStream=stream;
-      var mime=MediaRecorder.isTypeSupported('audio/mp4')?'audio/mp4':
-               (MediaRecorder.isTypeSupported('audio/webm')?'audio/webm':'');
-      mediaRec=mime?new MediaRecorder(stream,{mimeType:mime}):new MediaRecorder(stream);
-      var chunks=[];
-      mediaRec.ondataavailable=function(e){if(e.data.size)chunks.push(e.data);};
-      mediaRec.onstop=function(){
-        var blob=new Blob(chunks,{type:mediaRec.mimeType||'audio/mp4'});
-        if(micStream){micStream.getTracks().forEach(function(t){t.stop()});micStream=null;}
-        micOn=false;$('micBtn').classList.remove('live');$('micBtn').textContent='🎙️ Ascolto vocale';
-        if(blob.size<800){line('<span class="err">audio vuoto, riprova</span>');return;}
-        line('⏳ trascrivo…');
-        fetch(cfg.url.replace(/\/$/,'')+'/functions/v1/listen?pin='+encodeURIComponent(cfg.pin)+
-          '&mode=card&lang='+(cfg.lang||'en'),
-          {method:'POST',headers:{'Content-Type':'application/octet-stream'},body:blob})
-          .then(function(r){return r.json()}).then(function(j){
-            if(j.error){line('<span class="err">✗ '+j.error+'</span>');return;}
-            line('🎙️ sentito: «'+(j.text||'').replace(/</g,'&lt;')+'»');
-            if(j.card&&j.rank>=0&&j.suit>=0){
-              state.rank=j.rank;state.suit=j.suit;
-              sel(ranksEl,ranksEl.children[j.rank]);sel(suitsEl,suitsEl.children[j.suit]);
-              ready();var lg=L();
-              line('✓ <span class="act">'+lg.ranks[j.rank]+' / '+lg.suits[j.suit]+'</span>');
-              execute();
-            }else line('<span class="err">carta non riconosciuta — riprova o usa i pulsanti</span>');
-          }).catch(function(e){line('<span class="err">✗ '+e+'</span>')});
-      };
-      mediaRec.start();micOn=true;$('micBtn').classList.add('live');
-      $('micBtn').textContent='🎙️ ascolto… (parla ora)';
-      line('🎙️ fai dire la carta ad alta voce…');
-      setTimeout(function(){if(mediaRec&&mediaRec.state!=='inactive')mediaRec.stop();},4500);
+    line('🎙️ attivo il microfono…');
+    navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true}}).then(function(stream){
+      micStream=stream;micOn=true;lastCode='';
+      $('micBtn').classList.add('live');$('micBtn').textContent='🎙️ IN ASCOLTO (tocca per fermare)';
+      line('🎙️ ascolto continuo attivo — parlate pure, prendo solo la carta');
+      recordChunk();
     }).catch(function(e){line('<span class="err">micro negato: '+e+'</span>');stopMic();});
   };
 
