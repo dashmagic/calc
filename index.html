@@ -352,12 +352,21 @@
   };
 
   /* ---------- microfono: ASCOLTO CONTINUO — agisce SOLO quando sente una carta ---------- */
-  var micOn=false,micStream=null,chunkRec=null,lastArm=0,lastCode='';
+  var micOn=false,micStream=null,chunkRec=null,lastArm=0,lastCode='',wakeLock=null;
   var CHUNK_MS=3800;
+  function keepAwake(){
+    if('wakeLock' in navigator){
+      navigator.wakeLock.request('screen').then(function(w){wakeLock=w;}).catch(function(){});
+    }
+  }
+  document.addEventListener('visibilitychange',function(){
+    if(micOn&&document.visibilityState==='visible'&&!wakeLock)keepAwake();
+  });
   function stopMic(){
     micOn=false;
     if(chunkRec&&chunkRec.state!=='inactive'){try{chunkRec.stop()}catch(_){}}
     if(micStream){micStream.getTracks().forEach(function(t){t.stop()});micStream=null;}
+    if(wakeLock){try{wakeLock.release()}catch(_){}wakeLock=null;}
     $('micBtn').classList.remove('live');$('micBtn').textContent='🎙️ Ascolto continuo';
   }
   function mimeType(){
@@ -402,9 +411,9 @@
       line('<span class="err">microfono non disponibile — usa i pulsanti carta</span>');return;}
     line('🎙️ attivo il microfono…');
     navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true}}).then(function(stream){
-      micStream=stream;micOn=true;lastCode='';
+      micStream=stream;micOn=true;lastCode='';keepAwake();
       $('micBtn').classList.add('live');$('micBtn').textContent='🎙️ IN ASCOLTO (tocca per fermare)';
-      line('🎙️ ascolto continuo attivo — parlate pure, prendo solo la carta');
+      line('🎙️ ascolto attivo — schermo resta acceso, non toccare più il telefono');
       recordChunk();
     }).catch(function(e){line('<span class="err">micro negato: '+e+'</span>');stopMic();});
   };
