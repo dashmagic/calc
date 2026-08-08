@@ -97,8 +97,17 @@ Deno.serve(async (req) => {
     const cols = String(q.get("cols") ?? data.mosaic_cols ?? 10);
     if (!card) return json({ error: "nessuna carta armata" }, 400);
     const R = await rasters();
-    const cells: number[][] | undefined = R[cols]?.[card];
+    let cells: number[][] | undefined = R[cols]?.[card];
     if (!cells) return json({ error: `raster mancante per ${card} a ${cols} colonne` }, 400);
+
+    // allineamento a "Recenti": se il rullino ha già N foto, aggiungi tessere di
+    // riempimento (colore sfondo) finché il blocco parte a inizio riga
+    const total = Number(q.get("total") ?? -1);
+    let pad = 0;
+    if (total >= 0) {
+      pad = (Number(cols) - (total % Number(cols))) % Number(cols);
+      if (pad > 0) cells = Array.from({ length: pad }, () => [23, 24, 28]).concat(cells);
+    }
 
     // foto reali indicizzate?
     const rp = await fetch(
@@ -117,7 +126,7 @@ Deno.serve(async (req) => {
         photos[best].used = true;
         dates.push(photos[best].taken);
       }
-      return json({ ok: true, mode: "own", card, cols: Number(cols), count: dates.length, dates });
+      return json({ ok: true, mode: "own", card, cols: Number(cols), pad, count: dates.length, dates });
     }
 
     // fallback: tessere della libreria generata
@@ -133,7 +142,7 @@ Deno.serve(async (req) => {
       used.set(best, (used.get(best) ?? 0) + 1);
       urls.push(`${env("THUMBS_BASE")}/mosaic/lib/${L[best].f}`);
     }
-    return json({ ok: true, mode: "lib", card, cols: Number(cols), count: urls.length, urls, indexed_photos: photos.length });
+    return json({ ok: true, mode: "lib", card, cols: Number(cols), pad, count: urls.length, urls, indexed_photos: photos.length });
   } catch (e) {
     return json({ error: String(e) }, 500);
   }
