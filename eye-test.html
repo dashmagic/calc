@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>The Bushi Show</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;800&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%;background:#07070c;color:#a7a294;font-family:Inter,sans-serif;overflow:hidden}
+  #vf{position:fixed;inset:0;z-index:9999;display:none;align-items:center;justify-content:center;background:#07070c}
+  #vf.on{display:flex}
+  #vf canvas{max-width:100%;max-height:100%;touch-action:none;cursor:crosshair}
+  #hint{position:fixed;left:0;right:0;bottom:calc(20px + env(safe-area-inset-bottom));text-align:center;
+    font-family:'Playfair Display',serif;font-size:clamp(15px,4.4vw,20px);color:#f0d97a;z-index:10000;
+    text-shadow:0 2px 20px #000;opacity:0;transition:opacity 1s ease;pointer-events:none;padding:0 24px}
+  #hint.on{opacity:.9}
+  /* pagina "normale" dietro */
+  .site{height:100%;display:flex;flex-direction:column}
+  .nav{padding:18px;text-align:center}.nav a{color:#a7a294;margin:0 10px;text-decoration:none}
+  .hero{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+  .h{font-family:'Playfair Display',serif;color:#d4af37;font-size:30px}
+</style>
+</head>
+<body>
+<!-- sito normale (chi non è nello show naviga qui) -->
+<div class="site">
+  <div class="nav"><a>Home</a><a>Show</a><a>Gallery</a><a>Contact</a></div>
+  <div class="hero"><div class="h">The Bushi Show</div><p>Father &amp; Son · Magic &amp; Mentalism</p>
+    <p style="font-size:12px;opacity:.5;margin-top:8px">pagina di prova occhio</p></div>
+</div>
+
+<!-- overlay reveal occhio -->
+<div id="vf"><canvas id="cv"></canvas></div>
+<div id="hint"></div>
+
+<script>
+(function(){
+  var EP="https://svvylcewvscbgwukwzdh.supabase.co/functions/v1/site?profile=dash";
+  var PORTRAIT="https://svvylcewvscbgwukwzdh.supabase.co/storage/v1/object/public/thumbs/portraits/dash.jpg";
+  var CARDS="https://svvylcewvscbgwukwzdh.supabase.co/storage/v1/object/public/thumbs/cards/";
+  var HINT={it:"Guardami negli occhi… avvicìnati",en:"Look into my eyes… come closer",sq:"Shiko në sytë e mi… afrohu"};
+  // iride nell'immagine originale (1200x1053)
+  var IMG_W=1200,IMG_H=1053,IRIS_X=464,IRIS_Y=322,IRIS_R=13;
+  var vf=document.getElementById('vf'),cv=document.getElementById('cv'),g=cv.getContext('2d'),
+      hint=document.getElementById('hint'),shown=false;
+  var portrait=new Image();portrait.crossOrigin="anonymous";
+  var cardImg=new Image();cardImg.crossOrigin="anonymous";
+  var fit={s:1,ox:0,oy:0},lens={x:-1,y:-1,active:false},Z=3.0,LR=78;
+
+  function layout(){
+    var vw=Math.min(innerWidth,portrait.naturalWidth||IMG_W),
+        vh=Math.min(innerHeight,portrait.naturalHeight||IMG_H);
+    var s=Math.min(innerWidth/IMG_W,innerHeight/IMG_H);
+    var w=IMG_W*s,h=IMG_H*s;
+    cv.width=w;cv.height=h;cv.style.width=w+'px';cv.style.height=h+'px';
+    fit.s=s;fit.ox=0;fit.oy=0;
+  }
+  function irisScreen(){return {x:IRIS_X*fit.s,y:IRIS_Y*fit.s,r:IRIS_R*fit.s};}
+
+  function draw(){
+    if(!portrait.complete)return;
+    g.clearRect(0,0,cv.width,cv.height);
+    g.drawImage(portrait,0,0,cv.width,cv.height);
+    if(lens.active){
+      var r=LR;
+      g.save();
+      g.beginPath();g.arc(lens.x,lens.y,r,0,7);g.closePath();g.clip();
+      // porzione ingrandita del ritratto attorno al dito
+      var sx=lens.x/fit.s - r/(fit.s*Z), sy=lens.y/fit.s - r/(fit.s*Z),
+          sw=(2*r)/(fit.s*Z), sh=(2*r)/(fit.s*Z);
+      g.drawImage(portrait, sx,sy,sw,sh, lens.x-r,lens.y-r, 2*r,2*r);
+      // se la lente è sull'iride → disegna la carta come riflesso dentro l'iride ingrandita
+      var ir=irisScreen();
+      var d=Math.hypot(lens.x-ir.x,lens.y-ir.y);
+      if(d < r*0.9 && cardImg.complete){
+        // posizione/raggio dell'iride vista dentro la lente
+        var mx=lens.x+(ir.x-lens.x)*Z, my=lens.y+(ir.y-lens.y)*Z, mr=ir.r*Z*1.05;
+        g.save();
+        g.beginPath();g.arc(mx,my,mr,0,7);g.closePath();g.clip();
+        // carta piccola centrata nell'iride, leggermente sovraesposta come riflesso
+        var cw=mr*2.0, ch=cw*1.4, ratio=(cardImg.naturalWidth/cardImg.naturalHeight)||0.71;
+        cw=mr*2.2; ch=cw/ratio;
+        g.globalAlpha=0.9;g.globalCompositeOperation='screen';
+        g.drawImage(cardImg, mx-cw/2, my-ch/2, cw, ch);
+        g.globalCompositeOperation='source-over';
+        // catchlight + bordo iride
+        g.globalAlpha=0.5;g.fillStyle='rgba(255,255,255,.9)';
+        g.beginPath();g.arc(mx-mr*0.3,my-mr*0.35,mr*0.16,0,7);g.fill();
+        g.restore();
+        // pupilla al centro
+        g.globalAlpha=0.85;g.fillStyle='#0a0a0e';
+        g.beginPath();g.arc(mx,my,mr*0.42,0,7);g.fill();g.globalAlpha=1;
+      }
+      // anello lente
+      g.restore();
+      g.lineWidth=3;g.strokeStyle='rgba(212,175,55,.8)';
+      g.beginPath();g.arc(lens.x,lens.y,r,0,7);g.stroke();
+      g.lineWidth=1;g.strokeStyle='rgba(255,255,255,.25)';
+      g.beginPath();g.arc(lens.x,lens.y,r-2,0,7);g.stroke();
+    }
+    requestAnimationFrame(draw);
+  }
+
+  function pt(e){var r=cv.getBoundingClientRect();var t=e.touches?e.touches[0]:e;
+    return {x:t.clientX-r.left,y:t.clientY-r.top};}
+  function move(e){e.preventDefault();var p=pt(e);lens.x=p.x;lens.y=p.y;lens.active=true;}
+  function end(){lens.active=false;}
+  cv.addEventListener('pointerdown',move);cv.addEventListener('pointermove',function(e){if(lens.active||e.pressure>0)move(e);});
+  cv.addEventListener('pointerup',end);cv.addEventListener('pointerleave',end);
+
+  function start(code,lang){
+    if(shown)return;shown=true;
+    cardImg.src=CARDS+code+".svg";
+    vf.classList.add('on');layout();requestAnimationFrame(draw);
+    hint.textContent=HINT[lang]||HINT.en;hint.classList.add('on');
+    setTimeout(function(){hint.classList.remove('on');},5000);
+  }
+  addEventListener('resize',function(){if(shown)layout();});
+
+  var pending=null;
+  function check(){fetch(EP,{cache:'no-store'}).then(function(r){return r.json();}).then(function(j){
+    if(!j)return;var code=j.card&&/^(10|[2-9]|[AJQK])[SHDC]$/.test(j.card)?j.card:null;
+    if(code)start(code,j.lang||'en');}).catch(function(){});}
+  portrait.onload=function(){if(pending)layout();};
+  portrait.src=PORTRAIT;
+  check();var iv=setInterval(function(){if(shown){clearInterval(iv);return;}check();},4000);
+})();
+</script>
+</body>
+</html>
