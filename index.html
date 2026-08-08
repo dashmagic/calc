@@ -309,7 +309,13 @@
       var lg2=L();
       line('mosaico: <span class="act">'+lg2.ranks[state.rank]+' / '+lg2.suits[state.suit]+'</span>');
       p=api('mosaic',{action:'arm',card:RANKL[state.rank]+SUITS[state.suit].l})
-        .then(function(j){if(j.ok)line('🃏 armato — lancia il Comando Rapido «Sync», poi consegna il telefono');return j;});
+        .then(function(j){
+          if(j.ok){
+            line('🃏 armato — avvio il Comando Rapido «Sync»…');
+            setTimeout(function(){location.href='shortcuts://run-shortcut?name=Sync';},350);
+          }
+          return j;
+        });
     }else{
       var q=$('songInput').value.trim();
       line('brano: <span class="act">'+q.replace(/</g,'&lt;')+'</span>');
