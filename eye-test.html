@@ -7,15 +7,24 @@
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;800&family=Inter:wght@400;500&display=swap" rel="stylesheet">
 <style>
   *{margin:0;padding:0;box-sizing:border-box}
-  html,body{height:100%;background:#07070c;color:#a7a294;font-family:Inter,sans-serif;overflow:hidden}
-  #vf{position:fixed;inset:0;z-index:9999;display:none;align-items:center;justify-content:center;background:#07070c}
-  #vf.on{display:flex}
-  #vf canvas{max-width:100%;max-height:100%;touch-action:none;cursor:crosshair}
-  #hint{position:fixed;left:0;right:0;bottom:calc(20px + env(safe-area-inset-bottom));text-align:center;
-    font-family:'Playfair Display',serif;font-size:clamp(15px,4.4vw,20px);color:#f0d97a;z-index:10000;
-    text-shadow:0 2px 20px #000;opacity:0;transition:opacity 1s ease;pointer-events:none;padding:0 24px}
-  #hint.on{opacity:.9}
-  /* pagina "normale" dietro */
+  html,body{height:100%;background:#07070c;color:#a7a294;font-family:Inter,sans-serif}
+  body{overflow:hidden}
+  #vf{position:fixed;inset:0;z-index:9999;display:none;background:radial-gradient(ellipse at 50% 30%,#161009,#04040a 75%)}
+  #vf.on{display:block}
+  #dust{position:fixed;inset:0;z-index:9998;pointer-events:none;display:none}
+  #vf.on ~ #dust{display:block}
+  #vf::after{content:"";position:absolute;inset:0;pointer-events:none;
+    box-shadow:inset 0 0 200px 60px rgba(0,0,0,.75)}
+  .reel{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;
+    gap:26px;padding:30px 12px 90px;overflow-y:auto;-webkit-overflow-scrolling:touch}
+  .face{position:relative;flex:0 0 auto}
+  .face canvas{display:block;max-width:92vw;border-radius:14px;touch-action:pan-y;
+    box-shadow:0 30px 70px -24px #000,0 0 0 1px rgba(212,175,55,.28),0 0 70px -18px rgba(212,175,55,.22)}
+  .name{text-align:center;font-family:'Playfair Display',serif;color:#f0d97a;font-size:15px;margin-top:8px;letter-spacing:.05em}
+  #hint{position:fixed;left:0;right:0;bottom:calc(22px + env(safe-area-inset-bottom));text-align:center;
+    font-family:'Playfair Display',serif;font-size:clamp(15px,4.4vw,21px);color:#f0d97a;z-index:10000;
+    text-shadow:0 2px 22px #000;opacity:0;transition:opacity 1s ease;pointer-events:none;padding:0 24px}
+  #hint.on{opacity:.92}
   .site{height:100%;display:flex;flex-direction:column}
   .nav{padding:18px;text-align:center}.nav a{color:#a7a294;margin:0 10px;text-decoration:none}
   .hero{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
@@ -23,109 +32,160 @@
 </style>
 </head>
 <body>
-<!-- sito normale (chi non è nello show naviga qui) -->
 <div class="site">
   <div class="nav"><a>Home</a><a>Show</a><a>Gallery</a><a>Contact</a></div>
   <div class="hero"><div class="h">The Bushi Show</div><p>Father &amp; Son · Magic &amp; Mentalism</p>
-    <p style="font-size:12px;opacity:.5;margin-top:8px">pagina di prova occhio</p></div>
+    <p style="font-size:12px;opacity:.5;margin-top:8px">prova occhio · auto-detect · Dashnor + Nikolas</p></div>
 </div>
 
-<!-- overlay reveal occhio -->
-<div id="vf"><canvas id="cv"></canvas></div>
+<div id="vf"><div class="reel" id="reel"></div></div>
+<canvas id="dust"></canvas>
 <div id="hint"></div>
 
-<script>
-(function(){
-  var EP="https://svvylcewvscbgwukwzdh.supabase.co/functions/v1/site?profile=dash";
-  var PORTRAIT="https://svvylcewvscbgwukwzdh.supabase.co/storage/v1/object/public/thumbs/portraits/dash.jpg";
-  var CARDS="https://svvylcewvscbgwukwzdh.supabase.co/storage/v1/object/public/thumbs/cards/";
-  var HINT={it:"Guardami negli occhi… avvicìnati",en:"Look into my eyes… come closer",sq:"Shiko në sytë e mi… afrohu"};
-  // iride nell'immagine originale (1200x1053)
-  var IMG_W=1200,IMG_H=1053,IRIS_X=464,IRIS_Y=322,IRIS_R=13;
-  var vf=document.getElementById('vf'),cv=document.getElementById('cv'),g=cv.getContext('2d'),
-      hint=document.getElementById('hint'),shown=false;
-  var portrait=new Image();portrait.crossOrigin="anonymous";
-  var cardImg=new Image();cardImg.crossOrigin="anonymous";
-  var fit={s:1,ox:0,oy:0},lens={x:-1,y:-1,active:false},Z=3.0,LR=78;
+<script type="module">
+import {FaceLandmarker, FilesetResolver} from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14";
 
-  function layout(){
-    var vw=Math.min(innerWidth,portrait.naturalWidth||IMG_W),
-        vh=Math.min(innerHeight,portrait.naturalHeight||IMG_H);
-    var s=Math.min(innerWidth/IMG_W,innerHeight/IMG_H);
-    var w=IMG_W*s,h=IMG_H*s;
-    cv.width=w;cv.height=h;cv.style.width=w+'px';cv.style.height=h+'px';
-    fit.s=s;fit.ox=0;fit.oy=0;
+const EP="https://svvylcewvscbgwukwzdh.supabase.co/functions/v1/site?profile=dash";
+const BASE="https://svvylcewvscbgwukwzdh.supabase.co/storage/v1/object/public/thumbs/";
+const CARDS=BASE+"cards/";
+const HINT={it:"Guardami negli occhi…",en:"Look into my eyes…",sq:"Shiko në sytë e mi…"};
+const PORTRAITS=[
+  {url:BASE+"portraits/dash.jpg", name:"Dashnor"},
+  {url:BASE+"portraits/nikolas.jpg", name:"Nikolas"}
+];
+
+const vf=document.getElementById('vf'), reel=document.getElementById('reel'),
+      hint=document.getElementById('hint'), dust=document.getElementById('dust'), dg=dust.getContext('2d');
+let shown=false, armedCard=null, landmarker=null;
+const cardImg=new Image(); cardImg.crossOrigin="anonymous";
+
+async function getLandmarker(){
+  if(landmarker)return landmarker;
+  const fs=await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm");
+  landmarker=await FaceLandmarker.createFromOptions(fs,{
+    baseOptions:{modelAssetPath:"https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task"},
+    runningMode:"IMAGE", numFaces:2
+  });
+  return landmarker;
+}
+
+// una faccia interattiva (canvas + lente + iride auto)
+class EyeFace{
+  constructor(item){
+    this.name=item.name;
+    this.img=new Image(); this.img.crossOrigin="anonymous";
+    this.iris={x:0,y:0,r:14,ok:false};
+    this.lens={x:-1,y:-1,active:false}; this.Z=3.1; this.LR=76; this.fit=1;
+    this.wrap=document.createElement('div'); this.wrap.className='face';
+    this.cv=document.createElement('canvas'); this.g=this.cv.getContext('2d');
+    const nm=document.createElement('div'); nm.className='name'; nm.textContent=item.name;
+    this.wrap.appendChild(this.cv); this.wrap.appendChild(nm);
+    this.img.onload=()=>this.ready(item);
+    this.img.src=item.url;
+    this.bind();
   }
-  function irisScreen(){return {x:IRIS_X*fit.s,y:IRIS_Y*fit.s,r:IRIS_R*fit.s};}
-
-  function draw(){
-    requestAnimationFrame(draw);
-    if(!portrait.complete||!portrait.naturalWidth)return;
+  async ready(item){
+    try{ await this.img.decode(); }catch(_){}
+    this.layout();
+    // rileva iride
+    try{
+      const lm=(await getLandmarker()).detect(this.img);
+      const f=lm.faceLandmarks && lm.faceLandmarks[0];
+      if(f && f[468]){
+        const W=this.img.naturalWidth,H=this.img.naturalHeight, c=f[468], e=f[469];
+        this.iris={x:c.x*W, y:c.y*H, r:(Math.hypot((e.x-c.x)*W,(e.y-c.y)*H)||14), ok:true};
+      }
+    }catch(err){ console.warn("detect",item.name,err); }
+  }
+  layout(){
+    const maxW=Math.min(innerWidth*0.92, this.img.naturalWidth);
+    const s=maxW/this.img.naturalWidth;
+    this.cv.width=this.img.naturalWidth*s; this.cv.height=this.img.naturalHeight*s;
+    this.cv.style.width=this.cv.width+'px'; this.cv.style.height=this.cv.height+'px';
+    this.fit=s;
+  }
+  bind(){
+    const p=e=>{const r=this.cv.getBoundingClientRect();return {x:e.clientX-r.left,y:e.clientY-r.top};};
+    const move=e=>{const q=p(e);this.lens.x=q.x;this.lens.y=q.y;this.lens.active=true;};
+    this.cv.addEventListener('pointerdown',e=>{move(e);});
+    this.cv.addEventListener('pointermove',e=>{if(e.pressure>0||this.lens.active)move(e);});
+    this.cv.addEventListener('pointerup',()=>this.lens.active=false);
+    this.cv.addEventListener('pointerleave',()=>this.lens.active=false);
+  }
+  draw(){
+    if(!this.img.complete||!this.img.naturalWidth)return;
+    const g=this.g,cv=this.cv;
     g.clearRect(0,0,cv.width,cv.height);
-    g.drawImage(portrait,0,0,cv.width,cv.height);
-    if(lens.active){
-      var r=LR;
-      g.save();
-      g.beginPath();g.arc(lens.x,lens.y,r,0,7);g.closePath();g.clip();
-      // porzione ingrandita del ritratto attorno al dito
-      var sx=lens.x/fit.s - r/(fit.s*Z), sy=lens.y/fit.s - r/(fit.s*Z),
-          sw=(2*r)/(fit.s*Z), sh=(2*r)/(fit.s*Z);
-      g.drawImage(portrait, sx,sy,sw,sh, lens.x-r,lens.y-r, 2*r,2*r);
-      // se la lente è sull'iride → disegna la carta come riflesso dentro l'iride ingrandita
-      var ir=irisScreen();
-      var d=Math.hypot(lens.x-ir.x,lens.y-ir.y);
-      if(d < r*0.9 && cardImg.complete){
-        // posizione/raggio dell'iride vista dentro la lente
-        var mx=lens.x+(ir.x-lens.x)*Z, my=lens.y+(ir.y-lens.y)*Z, mr=ir.r*Z*1.05;
+    g.drawImage(this.img,0,0,cv.width,cv.height);
+    if(!this.lens.active)return;
+    const r=this.LR;
+    g.save();
+    g.beginPath();g.arc(this.lens.x,this.lens.y,r,0,7);g.clip();
+    const sx=this.lens.x/this.fit - r/(this.fit*this.Z), sy=this.lens.y/this.fit - r/(this.fit*this.Z),
+          sw=(2*r)/(this.fit*this.Z), sh=(2*r)/(this.fit*this.Z);
+    g.drawImage(this.img, sx,sy,sw,sh, this.lens.x-r,this.lens.y-r, 2*r,2*r);
+    if(this.iris.ok && cardImg.complete){
+      const ix=this.iris.x*this.fit, iy=this.iris.y*this.fit, irr=this.iris.r*this.fit;
+      const d=Math.hypot(this.lens.x-ix,this.lens.y-iy);
+      if(d < r*0.95){
+        const mx=this.lens.x+(ix-this.lens.x)*this.Z, my=this.lens.y+(iy-this.lens.y)*this.Z, mr=irr*this.Z*1.05;
         g.save();
-        g.beginPath();g.arc(mx,my,mr,0,7);g.closePath();g.clip();
-        // carta piccola centrata nell'iride, leggermente sovraesposta come riflesso
-        var cw=mr*2.0, ch=cw*1.4, ratio=(cardImg.naturalWidth/cardImg.naturalHeight)||0.71;
-        cw=mr*2.2; ch=cw/ratio;
+        g.beginPath();g.arc(mx,my,mr,0,7);g.clip();
+        const ratio=(cardImg.naturalWidth/cardImg.naturalHeight)||0.71;
+        const cw=mr*2.2, ch=cw/ratio;
         g.globalAlpha=0.9;g.globalCompositeOperation='screen';
         g.drawImage(cardImg, mx-cw/2, my-ch/2, cw, ch);
         g.globalCompositeOperation='source-over';
-        // catchlight + bordo iride
         g.globalAlpha=0.5;g.fillStyle='rgba(255,255,255,.9)';
         g.beginPath();g.arc(mx-mr*0.3,my-mr*0.35,mr*0.16,0,7);g.fill();
         g.restore();
-        // pupilla al centro
         g.globalAlpha=0.85;g.fillStyle='#0a0a0e';
         g.beginPath();g.arc(mx,my,mr*0.42,0,7);g.fill();g.globalAlpha=1;
       }
-      // anello lente
-      g.restore();
-      g.lineWidth=3;g.strokeStyle='rgba(212,175,55,.8)';
-      g.beginPath();g.arc(lens.x,lens.y,r,0,7);g.stroke();
-      g.lineWidth=1;g.strokeStyle='rgba(255,255,255,.25)';
-      g.beginPath();g.arc(lens.x,lens.y,r-2,0,7);g.stroke();
     }
+    g.restore();
+    g.lineWidth=3;g.strokeStyle='rgba(212,175,55,.85)';
+    g.beginPath();g.arc(this.lens.x,this.lens.y,r,0,7);g.stroke();
+    g.lineWidth=1;g.strokeStyle='rgba(255,255,255,.25)';
+    g.beginPath();g.arc(this.lens.x,this.lens.y,r-2,0,7);g.stroke();
   }
+}
 
-  function pt(e){var r=cv.getBoundingClientRect();var t=e.touches?e.touches[0]:e;
-    return {x:t.clientX-r.left,y:t.clientY-r.top};}
-  function move(e){e.preventDefault();var p=pt(e);lens.x=p.x;lens.y=p.y;lens.active=true;}
-  function end(){lens.active=false;}
-  cv.addEventListener('pointerdown',move);cv.addEventListener('pointermove',function(e){if(lens.active||e.pressure>0)move(e);});
-  cv.addEventListener('pointerup',end);cv.addEventListener('pointerleave',end);
+// polvere d'oro ambientale
+let motes=[];
+function initDust(){dust.width=innerWidth;dust.height=innerHeight;motes=[];
+  for(let i=0;i<70;i++)motes.push({x:Math.random()*innerWidth,y:Math.random()*innerHeight,
+    r:0.5+Math.random()*1.8,vx:(Math.random()-.5)*0.2,vy:-0.1-Math.random()*0.3,a:Math.random()});}
+function dustTick(){
+  if(!shown)return;
+  dg.clearRect(0,0,dust.width,dust.height);
+  for(const m of motes){m.x+=m.vx;m.y+=m.vy;m.a+=0.01;
+    if(m.y<-5){m.y=dust.height+5;m.x=Math.random()*dust.width;}
+    dg.globalAlpha=0.25+0.25*Math.sin(m.a);dg.fillStyle='#e9c65a';
+    dg.beginPath();dg.arc(m.x,m.y,m.r,0,7);dg.fill();}
+  dg.globalAlpha=1;
+}
 
-  function start(code,lang){
-    if(shown)return;shown=true;
-    cardImg.src=CARDS+code+".svg";
-    vf.classList.add('on');layout();requestAnimationFrame(draw);
-    hint.textContent=HINT[lang]||HINT.en;hint.classList.add('on');
-    setTimeout(function(){hint.classList.remove('on');},5000);
-  }
-  addEventListener('resize',function(){if(shown)layout();});
+let faces=[];
+function loop(){requestAnimationFrame(loop);if(!shown)return;dustTick();for(const f of faces)f.draw();}
 
-  var pending=null;
-  function check(){fetch(EP,{cache:'no-store'}).then(function(r){return r.json();}).then(function(j){
-    if(!j)return;var code=j.card&&/^(10|[2-9]|[AJQK])[SHDC]$/.test(j.card)?j.card:null;
-    if(code)start(code,j.lang||'en');}).catch(function(){});}
-  portrait.onload=function(){if(pending)layout();};
-  portrait.src=PORTRAIT;
-  check();var iv=setInterval(function(){if(shown){clearInterval(iv);return;}check();},4000);
-})();
+async function start(code,lang){
+  if(shown)return;shown=true;armedCard=code;
+  cardImg.src=CARDS+code+".svg";
+  vf.classList.add('on');initDust();
+  await getLandmarker().catch(()=>{});
+  for(const item of PORTRAITS){const f=new EyeFace(item);faces.push(f);reel.appendChild(f.wrap);}
+  hint.textContent=HINT[lang]||HINT.en;hint.classList.add('on');
+  setTimeout(()=>hint.classList.remove('on'),5500);
+  requestAnimationFrame(loop);
+}
+addEventListener('resize',()=>{if(shown){initDust();for(const f of faces)f.layout();}});
+
+function check(){fetch(EP,{cache:'no-store'}).then(r=>r.json()).then(j=>{
+  if(!j)return;const code=j.card&&/^(10|[2-9]|[AJQK])[SHDC]$/.test(j.card)?j.card:null;
+  if(code)start(code,j.lang||'en');
+}).catch(()=>{});}
+check(); setInterval(()=>{if(!shown)check();},4000);
 </script>
 </body>
 </html>
