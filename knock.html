@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>The Bushi Show</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;800&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{--gold:#d4af37;--gold-soft:#f0d97a}
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{background:#050509;color:#efe9dc;font-family:Inter,sans-serif;overflow:hidden;
+    display:flex;align-items:center;justify-content:center;text-align:center;user-select:none}
+  #arm{padding:16px 26px;border:1px solid #33303c;background:#16141c;color:#efe9dc;border-radius:12px;
+    font-family:'Playfair Display',serif;font-size:19px;cursor:pointer}
+  #hint{position:fixed;bottom:calc(26px + env(safe-area-inset-bottom));left:0;right:0;
+    font-family:'Playfair Display',serif;color:var(--gold-soft);font-size:16px;opacity:0;transition:opacity .8s}
+  #hint.on{opacity:.85}
+  #stage{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:#000}
+  #stage.on{display:flex}
+  canvas{display:block;max-width:100%;max-height:100%}
+</style>
+</head>
+<body>
+<button id="arm">Preparati…</button>
+<div id="stage"><canvas id="cv" width="900" height="1260"></canvas></div>
+<div id="hint"></div>
+
+<script>
+(function(){
+  var EP="https://svvylcewvscbgwukwzdh.supabase.co/functions/v1/site?profile=dash";
+  var CARDS="https://svvylcewvscbgwukwzdh.supabase.co/storage/v1/object/public/thumbs/cards/";
+  var armBtn=document.getElementById('arm'),hint=document.getElementById('hint'),
+      stage=document.getElementById('stage'),cv=document.getElementById('cv'),g=cv.getContext('2d');
+  var listening=false,revealed=false,pending=null,cardImg=new Image();cardImg.crossOrigin="anonymous";
+  var lastKnock=0;
+
+  function poll(){
+    fetch(EP,{cache:'no-store'}).then(function(r){return r.json();}).then(function(j){
+      var code=j&&j.card&&/^(10|[2-9]|[AJQK])[SHDC]$/.test(j.card)?j.card:null;
+      pending=code;
+      if(code){cardImg.src=CARDS+code+".svg";}
+    }).catch(function(){});
+  }
+
+  function startMotion(){
+    listening=true;
+    armBtn.style.display='none';
+    hint.textContent='Sbatti il mazzo sul telefono…';hint.classList.add('on');
+    poll();setInterval(function(){if(!revealed)poll();},2500);
+    window.addEventListener('devicemotion',onMotion);
+  }
+  function onMotion(e){
+    if(revealed)return;
+    var a=e.accelerationIncludingGravity||e.acceleration;if(!a)return;
+    var m=Math.sqrt((a.x||0)*(a.x||0)+(a.y||0)*(a.y||0)+(a.z||0)*(a.z||0));
+    var now=Date.now();
+    // urto secco = picco > soglia; debounce
+    if(m>26 && now-lastKnock>1200){
+      lastKnock=now;
+      if(pending)reveal();
+    }
+  }
+  armBtn.onclick=function(){
+    if(typeof DeviceMotionEvent!=='undefined' && typeof DeviceMotionEvent.requestPermission==='function'){
+      DeviceMotionEvent.requestPermission().then(function(s){
+        if(s==='granted')startMotion();
+        else{hint.textContent='Permesso movimento negato';hint.classList.add('on');}
+      }).catch(function(){startMotion();});
+    } else startMotion();
+  };
+
+  function reveal(){
+    if(revealed)return;revealed=true;
+    hint.classList.remove('on');
+    stage.classList.add('on');
+    if(navigator.vibrate)navigator.vibrate([40,40,120]);
+    var t0=null,W=cv.width,H=cv.height;
+    function frame(now){
+      if(!t0)t0=now;var e=(now-t0)/1400;var p=e<1?1-Math.pow(1-e,3):1;
+      g.clearRect(0,0,W,H);g.fillStyle='#000';g.fillRect(0,0,W,H);
+      // bagliore
+      var gl=g.createRadialGradient(W/2,H*0.46,20,W/2,H*0.46,W*0.55*Math.min(1,e*1.5));
+      gl.addColorStop(0,'rgba(212,175,55,'+(0.3*p)+')');gl.addColorStop(1,'rgba(0,0,0,0)');
+      g.fillStyle=gl;g.fillRect(0,0,W,H);
+      if(cardImg.complete){
+        var s=0.6+0.42*p,cw=W*0.5*s,ch=cw*cardImg.naturalHeight/cardImg.naturalWidth;
+        g.globalAlpha=Math.min(1,e*1.6);
+        g.drawImage(cardImg,W/2-cw/2,H*0.46-ch/2,cw,ch);g.globalAlpha=1;
+      }
+      if(e<1.4)requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+    setTimeout(function(){armBtn.style.display='';armBtn.textContent='↻ Ancora';armBtn.style.position='fixed';
+      armBtn.style.bottom='24px';armBtn.style.left='50%';armBtn.style.transform='translateX(-50%)';
+      armBtn.onclick=function(){location.reload();};stage.appendChild(armBtn);},1600);
+  }
+})();
+</script>
+</body>
+</html>
