@@ -113,7 +113,6 @@
 
   <div class="mods" id="modPicker">
     <button class="mod sel" data-mod="oracolo"><b>Oracolo</b><small>YouTube</small></button>
-    <button class="mod" data-mod="prophet"><b>Prophet</b><small>Spotify</small></button>
     <button class="mod" data-mod="mosaic"><b>Mosaic</b><small>Rullino foto</small></button>
     <button class="mod" data-mod="site"><b>Sito</b><small>bushishow.com</small></button>
     <button class="mod" data-mod="tutto"><b>Arma tutto</b><small>ogni canale</small></button>
@@ -339,8 +338,6 @@
         .then(function(j){line(j&&j.ok?'  🌐 sito ✓':'  🌐 sito ✗');return j;}) ];
       if(cfg.video)jobs.push( api('oracolo',{video_id:cfg.video,lang:cfg.lang||'en',card:code,title:cardTitle(state.rank,state.suit)})
         .then(function(j){line(j&&j.ok?'  ▶ youtube ✓':'  ▶ youtube —');return j;}).catch(function(){}) );
-      if(cfg.playlist)jobs.push( api('prophet',{playlist_id:cfg.playlist,query:lg4.ranks[state.rank]})
-        .then(function(j){line(j&&j.ok?'  ♫ spotify ✓':'  ♫ spotify —');return j;}).catch(function(){}) );
       p=Promise.all(jobs).then(function(){return {ok:true};});
     }else{
       var q=$('songInput').value.trim();
