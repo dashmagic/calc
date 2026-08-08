@@ -114,6 +114,7 @@
   <div class="mods" id="modPicker">
     <button class="mod sel" data-mod="oracolo"><b>Oracolo</b><small>YouTube</small></button>
     <button class="mod" data-mod="prophet"><b>Prophet</b><small>Spotify</small></button>
+    <button class="mod" data-mod="mosaic"><b>Mosaic</b><small>Rullino foto</small></button>
   </div>
 
   <div id="cardArea">
@@ -273,7 +274,7 @@
     var m=e.target.closest('.mod');if(!m||state.running)return;
     state.mod=m.dataset.mod;
     this.querySelectorAll('.mod').forEach(function(x){x.classList.remove('sel')});m.classList.add('sel');
-    $('cardArea').style.display=state.mod==='oracolo'?'':'none';
+    $('cardArea').style.display=state.mod!=='prophet'?'':'none';
     $('songArea').style.display=state.mod==='prophet'?'':'none';
     ready();
   });
@@ -304,6 +305,11 @@
       line('carta: <span class="act">'+lg.ranks[state.rank]+' / '+lg.suits[state.suit]+'</span>');
       p=api('oracolo',{video_id:cfg.video,lang:cfg.lang||'en',
         card:RANKL[state.rank]+SUITS[state.suit].l,title:cardTitle(state.rank,state.suit)});
+    }else if(state.mod==='mosaic'){
+      var lg2=L();
+      line('mosaico: <span class="act">'+lg2.ranks[state.rank]+' / '+lg2.suits[state.suit]+'</span>');
+      p=api('mosaic',{action:'arm',card:RANKL[state.rank]+SUITS[state.suit].l})
+        .then(function(j){if(j.ok)line('🃏 armato — lancia il Comando Rapido «Sync», poi consegna il telefono');return j;});
     }else{
       var q=$('songInput').value.trim();
       line('brano: <span class="act">'+q.replace(/</g,'&lt;')+'</span>');
