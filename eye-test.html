@@ -9,22 +9,22 @@
   *{margin:0;padding:0;box-sizing:border-box}
   html,body{height:100%;background:#07070c;color:#a7a294;font-family:Inter,sans-serif}
   body{overflow:hidden}
-  #vf{position:fixed;inset:0;z-index:9999;display:none;background:radial-gradient(ellipse at 50% 30%,#161009,#04040a 75%)}
+  #vf{position:fixed;inset:0;z-index:9999;display:none;background:#0a0a0e}
   #vf.on{display:block}
-  #dust{position:fixed;inset:0;z-index:9998;pointer-events:none;display:none}
-  #vf.on ~ #dust{display:block}
-  #vf::after{content:"";position:absolute;inset:0;pointer-events:none;
-    box-shadow:inset 0 0 200px 60px rgba(0,0,0,.75)}
   .reel{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;
-    gap:26px;padding:30px 12px 90px;overflow-y:auto;-webkit-overflow-scrolling:touch}
+    gap:30px;padding:34px 12px 70px;overflow-y:auto;-webkit-overflow-scrolling:touch}
   .face{position:relative;flex:0 0 auto}
-  .face canvas{display:block;max-width:92vw;border-radius:14px;touch-action:pan-y;
-    box-shadow:0 30px 70px -24px #000,0 0 0 1px rgba(212,175,55,.28),0 0 70px -18px rgba(212,175,55,.22)}
-  .name{text-align:center;font-family:'Playfair Display',serif;color:#f0d97a;font-size:15px;margin-top:8px;letter-spacing:.05em}
+  .face canvas{display:block;max-width:92vw;border-radius:12px;touch-action:pan-y;
+    box-shadow:0 20px 50px -22px #000}
+  .name{text-align:center;font-family:'Playfair Display',serif;color:#8a8578;font-size:14px;margin-top:10px;letter-spacing:.06em}
   #hint{position:fixed;left:0;right:0;bottom:calc(22px + env(safe-area-inset-bottom));text-align:center;
     font-family:'Playfair Display',serif;font-size:clamp(15px,4.4vw,21px);color:#f0d97a;z-index:10000;
     text-shadow:0 2px 22px #000;opacity:0;transition:opacity 1s ease;pointer-events:none;padding:0 24px}
-  #hint.on{opacity:.92}
+  #hint.on{opacity:.85}
+  #glint{position:absolute;width:14px;height:14px;border-radius:50%;pointer-events:none;z-index:10001;
+    background:radial-gradient(circle,#fff,rgba(240,217,122,.6),transparent 70%);opacity:0;transition:opacity .8s}
+  #glint.on{opacity:.9;animation:tw 1.8s ease-in-out infinite}
+  @keyframes tw{50%{transform:scale(1.5);opacity:.55}}
   .site{height:100%;display:flex;flex-direction:column}
   .nav{padding:18px;text-align:center}.nav a{color:#a7a294;margin:0 10px;text-decoration:none}
   .hero{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
@@ -39,7 +39,7 @@
 </div>
 
 <div id="vf"><div class="reel" id="reel"></div></div>
-<canvas id="dust"></canvas>
+<div id="glint"></div>
 <div id="hint"></div>
 
 <script type="module">
@@ -55,7 +55,7 @@ const PORTRAITS=[
 ];
 
 const vf=document.getElementById('vf'), reel=document.getElementById('reel'),
-      hint=document.getElementById('hint'), dust=document.getElementById('dust'), dg=dust.getContext('2d');
+      hint=document.getElementById('hint'), glint=document.getElementById('glint');
 let shown=false, armedCard=null, landmarker=null;
 const cardImg=new Image(); cardImg.crossOrigin="anonymous";
 
@@ -151,35 +151,34 @@ class EyeFace{
   }
 }
 
-// polvere d'oro ambientale
-let motes=[];
-function initDust(){dust.width=innerWidth;dust.height=innerHeight;motes=[];
-  for(let i=0;i<70;i++)motes.push({x:Math.random()*innerWidth,y:Math.random()*innerHeight,
-    r:0.5+Math.random()*1.8,vx:(Math.random()-.5)*0.2,vy:-0.1-Math.random()*0.3,a:Math.random()});}
-function dustTick(){
-  if(!shown)return;
-  dg.clearRect(0,0,dust.width,dust.height);
-  for(const m of motes){m.x+=m.vx;m.y+=m.vy;m.a+=0.01;
-    if(m.y<-5){m.y=dust.height+5;m.x=Math.random()*dust.width;}
-    dg.globalAlpha=0.25+0.25*Math.sin(m.a);dg.fillStyle='#e9c65a';
-    dg.beginPath();dg.arc(m.x,m.y,m.r,0,7);dg.fill();}
-  dg.globalAlpha=1;
-}
-
 let faces=[];
-function loop(){requestAnimationFrame(loop);if(!shown)return;dustTick();for(const f of faces)f.draw();}
+function loop(){requestAnimationFrame(loop);if(!shown)return;for(const f of faces)f.draw();}
+
+// piccolo luccichio curioso sull'occhio del primo volto: invita ad avvicinarsi
+function placeGlint(){
+  const f=faces[0]; if(!f||!f.iris.ok){return;}
+  const r=f.cv.getBoundingClientRect();
+  glint.style.left=(r.left+f.iris.x*f.fit-7)+'px';
+  glint.style.top=(r.top+f.iris.y*f.fit-7)+'px';
+  glint.classList.add('on');
+  setTimeout(()=>glint.classList.remove('on'),6000);
+}
 
 async function start(code,lang){
   if(shown)return;shown=true;armedCard=code;
   cardImg.src=CARDS+code+".svg";
-  vf.classList.add('on');initDust();
+  vf.classList.add('on');
   await getLandmarker().catch(()=>{});
   for(const item of PORTRAITS){const f=new EyeFace(item);faces.push(f);reel.appendChild(f.wrap);}
   hint.textContent=HINT[lang]||HINT.en;hint.classList.add('on');
   setTimeout(()=>hint.classList.remove('on'),5500);
   requestAnimationFrame(loop);
+  // quando la prima iride è pronta, mostra il luccichio invitante
+  let tries=0;const gi=setInterval(()=>{tries++;if((faces[0]&&faces[0].iris.ok)||tries>40){clearInterval(gi);placeGlint();}},150);
+  // nascondi il luccichio appena si tocca
+  vf.addEventListener('pointerdown',()=>glint.classList.remove('on'),{once:true});
 }
-addEventListener('resize',()=>{if(shown){initDust();for(const f of faces)f.layout();}});
+addEventListener('resize',()=>{if(shown)for(const f of faces)f.layout();});
 
 function check(){fetch(EP,{cache:'no-store'}).then(r=>r.json()).then(j=>{
   if(!j)return;const code=j.card&&/^(10|[2-9]|[AJQK])[SHDC]$/.test(j.card)?j.card:null;
