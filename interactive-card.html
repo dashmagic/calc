@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>The Bushi Show</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;800&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;overflow:hidden}
+  body{background:#08080d;color:#a7a294;font-family:Inter,sans-serif;user-select:none;-webkit-user-select:none}
+  /* home finta */
+  .nav{padding:18px;text-align:center}.nav a{color:#a7a294;margin:0 10px;text-decoration:none}
+  .hero{height:70vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+  .h{font-family:'Playfair Display',serif;color:#d4af37;font-size:32px}
+  .sec{padding:30px 20px;text-align:center;border-top:1px solid #1a1a24;color:#8a8578}
+
+  #enable{position:fixed;bottom:calc(22px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);
+    padding:13px 22px;border:1px solid #d4af3766;background:#16141c;color:#f0d97a;border-radius:12px;
+    font-family:'Playfair Display',serif;font-size:16px;z-index:50}
+  #layer{position:fixed;inset:0;z-index:40;pointer-events:none;perspective:1400px;display:none}
+  #layer.on{display:block}
+  #card{position:absolute;left:50%;top:46%;width:min(210px,52vw);aspect-ratio:239/335;margin-left:-26vw;margin-top:-18vh;
+    transform-style:preserve-3d;pointer-events:auto;touch-action:none;will-change:transform;
+    border-radius:12px;overflow:hidden;box-shadow:0 30px 60px -20px #000,0 0 0 1px #ffffff18}
+  #card img{width:100%;height:100%;display:block;background:#fff}
+  #glare{position:absolute;inset:0;pointer-events:none;mix-blend-mode:screen;
+    background:radial-gradient(circle at 50% 40%,rgba(255,255,255,.55),rgba(255,255,255,0) 55%)}
+  #tip{position:fixed;top:calc(14px + env(safe-area-inset-top));left:0;right:0;text-align:center;
+    font-family:'Playfair Display',serif;color:#f0d97a;font-size:15px;opacity:0;transition:opacity .8s;z-index:60}
+  #tip.on{opacity:.85}
+</style>
+</head>
+<body>
+<div class="nav"><a>Home</a><a>Show</a><a>Gallery</a><a>Contact</a></div>
+<div class="hero"><div class="h">The Bushi Show</div><p>Father &amp; Son · Magic &amp; Mentalism</p>
+  <p style="font-size:12px;opacity:.5;margin-top:8px">prova carta interattiva</p></div>
+<div class="sec">As seen on Rai 1</div>
+
+<button id="enable">✦ Preparati</button>
+<div id="layer"><div id="card"><img id="cardimg" alt=""><div id="glare"></div></div></div>
+<div id="tip"></div>
+
+<script>
+(function(){
+  var EP="https://svvylcewvscbgwukwzdh.supabase.co/functions/v1/site?profile=dash";
+  var CARDS="https://svvylcewvscbgwukwzdh.supabase.co/storage/v1/object/public/thumbs/cards/";
+  var enable=document.getElementById('enable'),layer=document.getElementById('layer'),
+      card=document.getElementById('card'),img=document.getElementById('cardimg'),
+      glare=document.getElementById('glare'),tip=document.getElementById('tip');
+  var pending=null,shown=false,ready=false;
+  var tiltX=0,tiltY=0, dragX=0,dragY=0, dragging=false, gone=false;
+  var vx=0,vy=0,lastX=0,lastY=0,lastT=0;
+
+  function poll(){fetch(EP,{cache:'no-store'}).then(function(r){return r.json();}).then(function(j){
+    var code=j&&j.card&&/^(10|[2-9]|[AJQK])[SHDC]$/.test(j.card)?j.card:null;
+    pending=code; if(code)img.src=CARDS+code+".svg";
+  }).catch(function(){});}
+
+  function onOrient(e){
+    if(!shown)return;
+    // gamma: sinistra-destra (-90..90), beta: avanti-indietro
+    var gx=Math.max(-30,Math.min(30,(e.gamma||0)));
+    var gy=Math.max(-30,Math.min(30,((e.beta||0)-40)));
+    tiltX+=((gx)-tiltX)*0.12; tiltY+=((gy)-tiltY)*0.12;
+  }
+  function onMotion(e){
+    if(shown||!pending)return;
+    var a=e.accelerationIncludingGravity||{};
+    var m=Math.sqrt((a.x||0)*(a.x||0)+(a.y||0)*(a.y||0)+(a.z||0)*(a.z||0));
+    if(m>26){appear();}
+  }
+  function loop(){
+    requestAnimationFrame(loop);
+    if(!shown)return;
+    if(!dragging && !gone){ vx*=0.9; vy*=0.9; dragX+=vx; dragY+=vy;
+      if(Math.abs(dragX)>window.innerWidth*0.7||Math.abs(dragY)>window.innerHeight*0.7){dismiss();} }
+    var ry=tiltX*0.9 + (dragging?0:0), rx=-tiltY*0.7;
+    var floatY=Math.sin(Date.now()/700)*4;
+    card.style.transform='translate('+dragX+'px,'+(dragY+floatY)+'px) rotateY('+ry+'deg) rotateX('+rx+'deg)';
+    glare.style.transform='translate('+(-tiltX*1.6)+'px,'+(-tiltY*1.6)+'px)';
+  }
+
+  function appear(){
+    if(shown)return;shown=true;layer.classList.add('on');
+    tip.textContent='Muovi il telefono… poi trascìnala via';tip.classList.add('on');
+    setTimeout(function(){tip.classList.remove('on');},4500);
+    card.animate([{opacity:0,transform:'scale(.6)'},{opacity:1,transform:'scale(1)'}],{duration:700,easing:'cubic-bezier(.16,1.2,.3,1)'});
+    if(navigator.vibrate)navigator.vibrate([30,40,90]);
+  }
+  function dismiss(){
+    if(gone)return;gone=true;
+    var dir=dragX>=0?1:-1;
+    card.animate([{transform:card.style.transform},{transform:'translate('+(dir*window.innerWidth)+'px,'+(dragY-200)+'px) rotate('+(dir*40)+'deg)',opacity:0}],{duration:420,easing:'ease-in'});
+    setTimeout(function(){layer.classList.remove('on');shown=false;gone=false;dragX=dragY=vx=vy=0;
+      card.style.transform='';/* pronto per il prossimo trucco */ pending=null; poll();},420);
+  }
+
+  // trascinamento
+  card.addEventListener('pointerdown',function(e){dragging=true;card.setPointerCapture(e.pointerId);
+    lastX=e.clientX;lastY=e.clientY;lastT=Date.now();vx=vy=0;});
+  card.addEventListener('pointermove',function(e){if(!dragging)return;
+    var now=Date.now(),dt=Math.max(1,now-lastT);
+    var mx=e.clientX-lastX,my=e.clientY-lastY;
+    dragX+=mx;dragY+=my;vx=mx/dt*16;vy=my/dt*16;lastX=e.clientX;lastY=e.clientY;lastT=now;});
+  card.addEventListener('pointerup',function(){dragging=false;
+    if(Math.hypot(vx,vy)>18){/* lancio → vola via */} });
+
+  function start(){
+    ready=true;enable.style.display='none';
+    poll();setInterval(function(){if(!shown)poll();},2500);
+    window.addEventListener('deviceorientation',onOrient);
+    window.addEventListener('devicemotion',onMotion);
+    requestAnimationFrame(loop);
+    // se già armata e non vuoi il colpo, appare da sola dopo un attimo:
+    // (per test: appare al primo colpo O dopo 1.5s se armata)
+    setTimeout(function(){if(pending&&!shown)appear();},1500);
+  }
+  enable.onclick=function(){
+    var need=(typeof DeviceOrientationEvent!=='undefined'&&typeof DeviceOrientationEvent.requestPermission==='function');
+    if(need){DeviceOrientationEvent.requestPermission().then(function(s){
+      if(typeof DeviceMotionEvent!=='undefined'&&DeviceMotionEvent.requestPermission){DeviceMotionEvent.requestPermission().catch(function(){});}
+      start();
+    }).catch(start);} else start();
+  };
+})();
+</script>
+</body>
+</html>
