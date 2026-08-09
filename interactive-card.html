@@ -59,8 +59,8 @@
       glare=document.getElementById('glare'),tip=document.getElementById('tip'),
       shadow=document.getElementById('shadow');
   var pending=null,shown=false,ready=false;
-  var tiltX=0,tiltY=0, dragX=0,dragY=0, dragging=false, gone=false;
-  var vx=0,vy=0,lastX=0,lastY=0,lastT=0;
+  var dragX=0,dragY=0, dragging=false, gone=false, flung=false;
+  var vx=0,vy=0,lastX=0,lastY=0,lastT=0, gGamma=0,gBeta=40;
 
   function poll(){fetch(EP,{cache:'no-store'}).then(function(r){return r.json();}).then(function(j){
     var code=j&&j.card&&/^(10|[2-9]|[AJQK])[SHDC]$/.test(j.card)?j.card:null;
@@ -69,10 +69,8 @@
 
   function onOrient(e){
     if(!shown)return;
-    // gamma: sinistra-destra (-90..90), beta: avanti-indietro
-    var gx=Math.max(-30,Math.min(30,(e.gamma||0)));
-    var gy=Math.max(-30,Math.min(30,((e.beta||0)-40)));
-    tiltX+=((gx)-tiltX)*0.12; tiltY+=((gy)-tiltY)*0.12;
+    gGamma=e.gamma||0;      // sinistra-destra
+    gBeta =e.beta||40;      // avanti-indietro (~40 quando tieni il telefono normale)
   }
   function onMotion(e){
     if(shown||!pending)return;
@@ -83,17 +81,30 @@
   function loop(){
     requestAnimationFrame(loop);
     if(!shown)return;
-    if(!dragging && !gone){ vx*=0.9; vy*=0.9; dragX+=vx; dragY+=vy;
-      if(Math.abs(dragX)>window.innerWidth*0.7||Math.abs(dragY)>window.innerHeight*0.7){dismiss();} }
-    var ry=tiltX*0.95, rx=-tiltY*0.75;
-    var floatY=Math.sin(Date.now()/750)*4;
-    card.style.transform='translate('+dragX+'px,'+(dragY+floatY)+'px) rotateY('+ry+'deg) rotateX('+rx+'deg)';
-    // riflesso lucido segue l'inclinazione (patina)
-    var gp=50 - tiltX*1.6; var gv=50 + tiltY*1.6;
-    glare.style.backgroundPosition=gp+'% '+gv+'%';
-    // ombra si sposta opposta all'inclinazione, come luce reale
-    shadow.style.transform='translate('+(dragX - tiltX*1.4)+'px,'+(dragY+18 - tiltY*1.0)+'px) scale('+(1-Math.abs(ry)/240)+')';
-    shadow.style.opacity=String(Math.max(.2,.55-Math.abs(ry)/120));
+    var cw=card.offsetWidth||190, ch=card.offsetHeight||266;
+    var maxX=Math.max(0,(window.innerWidth-cw)/2-6);
+    var maxY=Math.max(0,(window.innerHeight-ch)/2-6);
+    if(!dragging){
+      // GRAVITÀ: inclinazione → la carta scivola verso il basso della pendenza
+      var gx=Math.max(-45,Math.min(45,gGamma));
+      var gy=Math.max(-45,Math.min(45,gBeta-40));
+      vx+=gx*0.045; vy+=gy*0.045;
+      vx*=0.88; vy*=0.88;
+      dragX+=vx; dragY+=vy;
+    }
+    if(!flung){
+      if(dragX>maxX){dragX=maxX;vx*=-0.2;} if(dragX<-maxX){dragX=-maxX;vx*=-0.2;}
+      if(dragY>maxY){dragY=maxY;vy*=-0.2;} if(dragY<-maxY){dragY=-maxY;vy*=-0.2;}
+    }else{
+      dragX+=vx;dragY+=vy;vx*=0.99;vy*=0.99;
+      if(Math.abs(dragX)>window.innerWidth||Math.abs(dragY)>window.innerHeight){dismiss();}
+    }
+    var floatY=Math.sin(Date.now()/800)*2.5;
+    card.style.transform='translate('+dragX+'px,'+(dragY+floatY)+'px)';
+    // riflesso lucido segue l'inclinazione
+    glare.style.backgroundPosition=(50-gGamma*1.3)+'% '+(50+(gBeta-40)*1.3)+'%';
+    // ombra sotto la carta
+    shadow.style.transform='translate('+dragX+'px,'+(dragY+16)+'px)';
   }
 
   function appear(){
@@ -107,7 +118,7 @@
     if(gone)return;gone=true;
     var dir=dragX>=0?1:-1;
     card.animate([{transform:card.style.transform},{transform:'translate('+(dir*window.innerWidth)+'px,'+(dragY-200)+'px) rotate('+(dir*40)+'deg)',opacity:0}],{duration:420,easing:'ease-in'});
-    setTimeout(function(){layer.classList.remove('on');shown=false;gone=false;dragX=dragY=vx=vy=0;
+    setTimeout(function(){layer.classList.remove('on');shown=false;gone=false;flung=false;dragX=dragY=vx=vy=0;
       card.style.transform='';/* pronto per il prossimo trucco */ pending=null; poll();},420);
   }
 
@@ -119,7 +130,9 @@
     var mx=e.clientX-lastX,my=e.clientY-lastY;
     dragX+=mx;dragY+=my;vx=mx/dt*16;vy=my/dt*16;lastX=e.clientX;lastY=e.clientY;lastT=now;});
   card.addEventListener('pointerup',function(){dragging=false;
-    if(Math.hypot(vx,vy)>18){/* lancio → vola via */} });
+    // strappo deciso → la carta vola fuori (la "riprendo e la rimetto nel mazzo")
+    if(Math.hypot(vx,vy)>16){flung=true;} });
+  card.addEventListener('pointercancel',function(){dragging=false;});
 
   function start(){
     ready=true;enable.style.display='none';
