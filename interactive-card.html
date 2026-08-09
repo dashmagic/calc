@@ -26,15 +26,12 @@
     transform-style:preserve-3d;pointer-events:auto;touch-action:none;will-change:transform;
     border-radius:11px;background:#fdfcf8;
     box-shadow:0 1px 0 1px rgba(0,0,0,.25), 0 0 0 .5px rgba(0,0,0,.35);}
-  #cardinner{position:absolute;inset:0;border-radius:11px;overflow:hidden;transform-style:preserve-3d}
-  #card img{width:100%;height:100%;display:block;background:#fff}
-  /* riflesso lucido diagonale (patina della carta) */
-  #glare{position:absolute;inset:0;pointer-events:none;mix-blend-mode:screen;border-radius:11px;
-    background:linear-gradient(115deg,rgba(255,255,255,0) 30%,rgba(255,255,255,.7) 48%,rgba(255,255,255,0) 62%);
-    background-size:250% 250%;background-position:100% 0}
-  /* bordo/spessore che reagisce all'inclinazione */
-  #rim{position:absolute;inset:0;pointer-events:none;border-radius:11px;
-    box-shadow:inset 0 0 0 1px rgba(255,255,255,.35), inset 0 0 14px rgba(0,0,0,.12)}
+  #cardinner{position:absolute;inset:0;border-radius:13px;overflow:hidden;transform-style:preserve-3d;background:#f7f4ee}
+  #card img{width:100%;height:100%;display:block;object-fit:cover}
+  /* riflesso lucido molto sottile, solo con l'inclinazione */
+  #glare{position:absolute;inset:0;pointer-events:none;mix-blend-mode:screen;border-radius:13px;opacity:.45;
+    background:linear-gradient(115deg,rgba(255,255,255,0) 40%,rgba(255,255,255,.28) 50%,rgba(255,255,255,0) 60%);
+    background-size:300% 300%;background-position:50% 50%}
   #tip{position:fixed;top:calc(14px + env(safe-area-inset-top));left:0;right:0;text-align:center;
     font-family:'Playfair Display',serif;color:#f0d97a;font-size:15px;opacity:0;transition:opacity .8s;z-index:60}
   #tip.on{opacity:.85}
@@ -47,13 +44,14 @@
 <div class="sec">As seen on Rai 1</div>
 
 <button id="enable">✦ Preparati</button>
-<div id="layer"><div id="shadow"></div><div id="card"><div id="cardinner"><img id="cardimg" alt=""><div id="glare"></div></div><div id="rim"></div></div></div>
+<div id="layer"><div id="shadow"></div><div id="card"><div id="cardinner"><img id="cardimg" alt=""><div id="glare"></div></div></div></div>
 <div id="tip"></div>
 
 <script>
 (function(){
   var EP="https://svvylcewvscbgwukwzdh.supabase.co/functions/v1/site?profile=dash";
-  var CARDS="https://svvylcewvscbgwukwzdh.supabase.co/storage/v1/object/public/thumbs/cards/";
+  var CARDS="https://svvylcewvscbgwukwzdh.supabase.co/storage/v1/object/public/thumbs/cards-real/";
+  var EXT=".png";
   var enable=document.getElementById('enable'),layer=document.getElementById('layer'),
       card=document.getElementById('card'),img=document.getElementById('cardimg'),
       glare=document.getElementById('glare'),tip=document.getElementById('tip'),
@@ -64,7 +62,7 @@
 
   function poll(){fetch(EP,{cache:'no-store'}).then(function(r){return r.json();}).then(function(j){
     var code=j&&j.card&&/^(10|[2-9]|[AJQK])[SHDC]$/.test(j.card)?j.card:null;
-    pending=code; if(code)img.src=CARDS+code+".svg";
+    pending=code; if(code)img.src=CARDS+code+EXT;
   }).catch(function(){});}
 
   function onOrient(e){
