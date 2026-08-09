@@ -30,6 +30,8 @@
   #glare{position:absolute;inset:0;pointer-events:none;mix-blend-mode:screen;border-radius:13px;opacity:.45;
     background:linear-gradient(115deg,rgba(255,255,255,0) 40%,rgba(255,255,255,.28) 50%,rgba(255,255,255,0) 60%);
     background-size:300% 300%;background-position:50% 50%}
+  #flash{position:fixed;inset:0;z-index:45;background:radial-gradient(circle at 50% 46%,#fff,rgba(255,255,255,0) 60%);
+    opacity:0;pointer-events:none}
   #tip{position:fixed;top:calc(14px + env(safe-area-inset-top));left:0;right:0;text-align:center;
     font-family:'Playfair Display',serif;color:#f0d97a;font-size:15px;opacity:0;transition:opacity .8s;z-index:60}
   #tip.on{opacity:.85}
@@ -42,6 +44,7 @@
 <div class="sec">As seen on Rai 1</div>
 
 <button id="enable">✦ Preparati</button>
+<div id="flash"></div>
 <div id="layer"><div id="shadow"></div><div id="card"><div id="cardinner"><img id="cardimg" alt=""><div id="glare"></div></div></div></div>
 <div id="tip"></div>
 
@@ -53,7 +56,8 @@
   var enable=document.getElementById('enable'),layer=document.getElementById('layer'),
       card=document.getElementById('card'),img=document.getElementById('cardimg'),
       glare=document.getElementById('glare'),tip=document.getElementById('tip'),
-      shadow=document.getElementById('shadow');
+      shadow=document.getElementById('shadow'),cardinner=document.getElementById('cardinner'),
+      flash=document.getElementById('flash');
   var pending=null,shown=false,ready=false,done=false;
   var dragX=0,dragY=0, dragging=false, gone=false, flung=false, flingRot=0;
   var vx=0,vy=0,lastX=0,lastY=0,lastT=0, gGamma=0,gBeta=40;
@@ -106,10 +110,19 @@
 
   function appear(){
     if(shown||done)return;shown=true;layer.classList.add('on');
+    // FLASH d'impatto
+    flash.animate([{opacity:0},{opacity:.85,offset:.12},{opacity:0}],{duration:340,easing:'ease-out'});
+    // scossa breve dello schermo (il colpo)
+    layer.animate([{transform:'translateY(0)'},{transform:'translateY(9px)'},{transform:'translateY(-4px)'},{transform:'translateY(0)'}],{duration:240,easing:'ease-out'});
+    // la carta viene SCAGLIATA DENTRO: dalla profondità → slam al centro con rimbalzo
+    cardinner.animate([
+      {opacity:0,transform:'translateY(-70px) scale(.18) rotate(-8deg)'},
+      {opacity:1,offset:.55,transform:'translateY(8px) scale(1.14) rotate(2deg)'},
+      {opacity:1,transform:'translateY(0) scale(1) rotate(0)'}
+    ],{duration:560,easing:'cubic-bezier(.2,1.35,.35,1)'});
     tip.textContent='Muovi il telefono… poi trascìnala via';tip.classList.add('on');
     setTimeout(function(){tip.classList.remove('on');},4500);
-    card.animate([{opacity:0,transform:'scale(.6)'},{opacity:1,transform:'scale(1)'}],{duration:700,easing:'cubic-bezier(.16,1.2,.3,1)'});
-    if(navigator.vibrate)navigator.vibrate([30,40,90]);
+    if(navigator.vibrate)navigator.vibrate([60,25,140]);
   }
   function dismiss(){
     if(gone)return;gone=true;done=true;   // consumata: non riappare più (serve ri-armare + ricaricare)
