@@ -20,12 +20,11 @@
     font-family:'Playfair Display',serif;font-size:16px;z-index:50}
   #layer{position:fixed;inset:0;z-index:40;pointer-events:none;perspective:1300px;display:none}
   #layer.on{display:block}
-  #shadow{position:absolute;left:0;top:0;width:min(360px,86vw);aspect-ratio:239/335;
-    border-radius:18px;background:#000;filter:blur(34px);opacity:.5;pointer-events:none}
-  #card{position:absolute;left:0;top:0;width:min(360px,86vw);aspect-ratio:239/335;
+  #card{position:absolute;left:0;top:0;width:min(480px,97vw,64vh);aspect-ratio:5/7;
     transform-style:preserve-3d;pointer-events:auto;touch-action:none;will-change:transform;}
-  #cardinner{position:absolute;inset:0;border-radius:16px;overflow:hidden;transform-style:preserve-3d;background:transparent}
-  #card img{width:100%;height:100%;display:block;object-fit:contain}
+  #cardinner{position:absolute;inset:0}
+  #card img{width:100%;height:100%;display:block;object-fit:contain;
+    -webkit-filter:drop-shadow(0 14px 22px rgba(0,0,0,.5));filter:drop-shadow(0 14px 22px rgba(0,0,0,.5))}
   /* riflesso lucido molto sottile, solo con l'inclinazione */
   #glare{position:absolute;inset:0;pointer-events:none;mix-blend-mode:screen;border-radius:13px;opacity:.45;
     background:linear-gradient(115deg,rgba(255,255,255,0) 40%,rgba(255,255,255,.28) 50%,rgba(255,255,255,0) 60%);
@@ -45,22 +44,21 @@
 
 <button id="enable">✦ Preparati</button>
 <div id="flash"></div>
-<div id="layer"><div id="shadow"></div><div id="card"><div id="cardinner"><img id="cardimg" alt=""><div id="glare"></div></div></div></div>
+<div id="layer"><div id="card"><div id="cardinner"><img id="cardimg" alt=""><div id="glare"></div></div></div></div>
 <div id="tip"></div>
 
 <script>
 (function(){
   var EP="https://svvylcewvscbgwukwzdh.supabase.co/functions/v1/site?profile=dash";
-  var CARDS="https://svvylcewvscbgwukwzdh.supabase.co/storage/v1/object/public/thumbs/cards-photo/";
+  var CARDS="https://svvylcewvscbgwukwzdh.supabase.co/storage/v1/object/public/thumbs/cards-clean/";
   var EXT=".png";
   var enable=document.getElementById('enable'),layer=document.getElementById('layer'),
       card=document.getElementById('card'),img=document.getElementById('cardimg'),
       glare=document.getElementById('glare'),tip=document.getElementById('tip'),
-      shadow=document.getElementById('shadow'),cardinner=document.getElementById('cardinner'),
       flash=document.getElementById('flash');
   var pending=null,shown=false,ready=false,done=false;
   var dragX=0,dragY=0, dragging=false, gone=false, flung=false, flingRot=0;
-  var vx=0,vy=0,lastX=0,lastY=0,lastT=0, gGamma=0,gBeta=40;
+  var vx=0,vy=0,lastX=0,lastY=0,lastT=0, gGamma=0,gBeta=40, activePts=0, multi=false;
 
   function poll(){fetch(EP,{cache:'no-store'}).then(function(r){return r.json();}).then(function(j){
     var code=j&&j.card&&/^(10|[2-9]|[AJQK])[SHDC]$/.test(j.card)?j.card:null;
@@ -111,7 +109,6 @@
     }
     card.style.transform='translate('+(baseX+dragX)+'px,'+(baseY+dragY)+'px)'+(flung?' rotate('+flingRot+'deg)':'');
     glare.style.backgroundPosition=(50-gGamma*1.2)+'% '+(50+(gBeta-40)*1.2)+'%';
-    shadow.style.transform='translate('+(baseX+dragX)+'px,'+(baseY+dragY+18)+'px)';
   }
 
   function appear(){
@@ -138,18 +135,22 @@
       enable.style.display='';enable.textContent='↻ Nuovo trucco';enable.onclick=function(){location.reload();};},420);
   }
 
-  // trascinamento
-  card.addEventListener('pointerdown',function(e){dragging=true;flung=false;card.setPointerCapture(e.pointerId);
+  // trascinamento (un solo dito: con due dita la carta NON si lancia via)
+  card.addEventListener('pointerdown',function(e){activePts++;
+    if(activePts>1){multi=true;dragging=false;vx=vy=0;return;}   // due dita → freeze, niente lancio
+    dragging=true;flung=false;try{card.setPointerCapture(e.pointerId);}catch(_){}
     lastX=e.clientX;lastY=e.clientY;vx=vy=0;});
-  card.addEventListener('pointermove',function(e){if(!dragging)return;
+  card.addEventListener('pointermove',function(e){if(!dragging||activePts>1)return;
     var mx=e.clientX-lastX,my=e.clientY-lastY;
     dragX+=mx;dragY+=my;
     vx=vx*0.35+mx*0.65; vy=vy*0.35+my*0.65;     // velocità smussata (movimento fluido)
     lastX=e.clientX;lastY=e.clientY;});
-  card.addEventListener('pointerup',function(){dragging=false;
-    // strappo deciso → la carta vola fuori
-    if(Math.hypot(vx,vy)>10){flung=true; vx*=2.6; vy*=2.6;} });
-  card.addEventListener('pointercancel',function(){dragging=false;});
+  function endPt(){activePts=Math.max(0,activePts-1);
+    if(activePts>0){dragging=false;return;}      // aspetta che si stacchino TUTTE le dita
+    var wasMulti=multi;multi=false;dragging=false;
+    if(!wasMulti&&Math.hypot(vx,vy)>10){flung=true; vx*=2.6; vy*=2.6;} }
+  card.addEventListener('pointerup',endPt);
+  card.addEventListener('pointercancel',endPt);
 
   function start(){
     ready=true;enable.style.display='none';
