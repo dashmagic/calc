@@ -402,15 +402,12 @@
     var AC=window.AudioContext||window.webkitAudioContext;
     audioCtx=new AC();
     if(audioCtx.resume)audioCtx.resume().catch(function(){});
-    srcNode=audioCtx.createMediaStreamSource(stream);
-    procNode=audioCtx.createScriptProcessor(4096,1,1);
-    muteNode=audioCtx.createGain();muteNode.gain.value=0;   // uscita muta → nessun ritorno in cassa
-    srcNode.connect(procNode);procNode.connect(muteNode);muteNode.connect(audioCtx.destination);
-    var frameMs=4096/audioCtx.sampleRate*1000;             // ~85ms per frame
-    var speaking=false,silMs=0,uttMs=0,utter=[],pre=[],PRE=4,noiseFloor=0.006;  // PRE≈340ms pre-roll
-    procNode.onaudioprocess=function(ev){
+    var speaking=false,silMs=0,uttMs=0,utter=[],pre=[],PRE=4,noiseFloor=0.006,frameMs=85,lastFrame=Date.now();
+    function onAudio(ev){
+      lastFrame=Date.now();
       if(!micOn)return;
       var d=ev.inputBuffer.getChannelData(0),c=new Float32Array(d.length);c.set(d);
+      frameMs=d.length/audioCtx.sampleRate*1000;
       var rms=0;for(var i=0;i<c.length;i++)rms+=c[i]*c[i];rms=Math.sqrt(rms/c.length);
       if(!speaking){
         noiseFloor=0.995*noiseFloor+0.005*rms;             // impara il rumore di fondo
@@ -421,7 +418,7 @@
         if(rms<Math.max(0.008,noiseFloor*2.5))silMs+=frameMs;else silMs=0;
         if(silMs>=650||uttMs>=7000)endUtter();             // pausa = frase finita · o troppo lunga
       }
-    };
+    }
     function endUtter(){
       var parts=utter,ms=uttMs;speaking=false;utter=[];pre=[];uttMs=0;silMs=0;
       if(ms<350)return;                                    // rumore breve → ignora
@@ -429,10 +426,40 @@
       var pcm=new Float32Array(len),off=0;parts.forEach(function(a){pcm.set(a,off);off+=a.length;});
       sendSamples(pcm);
     }
+    function buildGraph(){
+      try{if(procNode){procNode.onaudioprocess=null;procNode.disconnect();}}catch(_){}
+      try{if(srcNode)srcNode.disconnect();}catch(_){}
+      try{if(muteNode)muteNode.disconnect();}catch(_){}
+      srcNode=audioCtx.createMediaStreamSource(micStream);
+      procNode=audioCtx.createScriptProcessor(4096,1,1);
+      muteNode=audioCtx.createGain();muteNode.gain.value=0;   // uscita muta → nessun ritorno in cassa
+      srcNode.connect(procNode);procNode.connect(muteNode);muteNode.connect(audioCtx.destination);
+      procNode.onaudioprocess=onAudio;
+      speaking=false;utter=[];pre=[];uttMs=0;silMs=0;lastFrame=Date.now();
+    }
+    buildGraph();
+    audioCtx.onstatechange=function(){if(micOn&&audioCtx.state==='suspended')audioCtx.resume().catch(function(){});};
+    // WATCHDOG: se iOS sospende/ferma il motore audio, lo riavvia da solo → non smette MAI di ascoltare.
+    if(capTimer)clearInterval(capTimer);
+    capTimer=setInterval(function(){
+      if(!micOn)return;
+      if(audioCtx.state==='suspended')audioCtx.resume().catch(function(){});
+      var tr=micStream&&micStream.getAudioTracks?micStream.getAudioTracks()[0]:null;
+      if(!tr||tr.readyState!=='live'){   // traccia morta → riprendi il microfono
+        navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}})
+          .then(function(st){micStream=st;buildGraph();}).catch(function(){});
+        return;
+      }
+      if(Date.now()-lastFrame>1800)buildGraph();   // processore fermo da >1.8s → ricostruisci
+    },1000);
   }
   function encodeWav(pcm,inRate){
     var ratio=inRate/OUT_RATE,outLen=Math.max(1,Math.floor(pcm.length/ratio)),out=new Float32Array(outLen);
-    for(var i=0;i<outLen;i++)out[i]=pcm[Math.floor(i*ratio)];
+    for(var i=0;i<outLen;i++){                              // media dei campioni = filtro anti-alias (salva le sibilanti sh/s)
+      var a=Math.floor(i*ratio),b=Math.floor((i+1)*ratio),sum=0,n=0;
+      for(var k=a;k<b&&k<pcm.length;k++){sum+=pcm[k];n++;}
+      out[i]=n?sum/n:(pcm[a]||0);
+    }
     var buf=new ArrayBuffer(44+out.length*2),v=new DataView(buf);
     function ws(o,s){for(var i=0;i<s.length;i++)v.setUint8(o+i,s.charCodeAt(i));}
     ws(0,'RIFF');v.setUint32(4,36+out.length*2,true);ws(8,'WAVE');ws(12,'fmt ');
@@ -450,6 +477,7 @@
       {method:'POST',headers:{'Content-Type':'application/octet-stream'},body:wav})
       .then(function(r){return r.json()}).then(function(j){
         if(!j||j.error)return;
+        if(j.text)line('<span style="opacity:.4">👂 '+String(j.text).replace(/[<>]/g,'')+'</span>');  // DEBUG: cosa ha sentito
         // carta trovata? arma. Altrimenti (chiacchiere) → ignora in silenzio.
         if(j.card&&j.rank>=0&&j.suit>=0){
           var now=Date.now();
