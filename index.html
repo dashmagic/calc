@@ -412,10 +412,10 @@
       if(!speaking){
         noiseFloor=0.995*noiseFloor+0.005*rms;             // impara il rumore di fondo
         pre.push(c);if(pre.length>PRE)pre.shift();
-        if(rms>Math.max(0.012,noiseFloor*4)){speaking=true;utter=pre.slice();uttMs=pre.length*frameMs;silMs=0;}
+        if(rms>Math.max(0.007,noiseFloor*2.8)){speaking=true;utter=pre.slice();uttMs=pre.length*frameMs;silMs=0;}
       }else{
         utter.push(c);uttMs+=frameMs;
-        if(rms<Math.max(0.008,noiseFloor*2.5))silMs+=frameMs;else silMs=0;
+        if(rms<Math.max(0.004,noiseFloor*1.8))silMs+=frameMs;else silMs=0;
         if(silMs>=650||uttMs>=7000)endUtter();             // pausa = frase finita · o troppo lunga
       }
     }
@@ -424,6 +424,9 @@
       if(ms<350)return;                                    // rumore breve → ignora
       var len=0;parts.forEach(function(a){len+=a.length;});
       var pcm=new Float32Array(len),off=0;parts.forEach(function(a){pcm.set(a,off);off+=a.length;});
+      // NORMALIZZA il volume: amplifica la frase (fino a 14×) così le carte si sentono forte anche da LONTANO
+      var peak=0;for(var p=0;p<pcm.length;p++){var ab=pcm[p]<0?-pcm[p]:pcm[p];if(ab>peak)peak=ab;}
+      if(peak>0.004){var g=Math.min(14,0.97/peak);for(var q=0;q<pcm.length;q++)pcm[q]*=g;}
       sendSamples(pcm);
     }
     function buildGraph(){
