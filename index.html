@@ -132,6 +132,7 @@
 
   <div class="microw">
     <button class="micbtn" id="micBtn">🎙️ Ascolto vocale</button>
+    <button class="micbtn" id="hearBtn" style="opacity:.55;font-size:12px;flex:0 0 auto">👂 debug OFF</button>
   </div>
 
   <div id="log">&gt; pronto.</div>
@@ -480,7 +481,7 @@
       {method:'POST',headers:{'Content-Type':'application/octet-stream'},body:wav})
       .then(function(r){return r.json()}).then(function(j){
         if(!j||j.error)return;
-        if(j.text)line('<span style="opacity:.4">👂 '+String(j.text).replace(/[<>]/g,'')+'</span>');  // DEBUG: cosa ha sentito
+        if(hearDbg&&j.text)line('<span style="opacity:.4">👂 '+String(j.text).replace(/[<>]/g,'')+'</span>');  // DEBUG (spegnibile): cosa ha sentito
         // carta trovata? arma. Altrimenti (chiacchiere) → ignora in silenzio.
         if(j.card&&j.rank>=0&&j.suit>=0){
           var now=Date.now();
@@ -494,6 +495,12 @@
         }
       }).catch(function(){});
   }
+  var hearDbg=(localStorage.getItem('vfHear')==='1');
+  (function(){var hb=$('hearBtn');if(!hb)return;
+    hb.textContent='👂 debug '+(hearDbg?'ON':'OFF');
+    hb.onclick=function(){hearDbg=!hearDbg;localStorage.setItem('vfHear',hearDbg?'1':'0');
+      hb.textContent='👂 debug '+(hearDbg?'ON':'OFF');hb.style.opacity=hearDbg?'.9':'.55';};
+  })();
   $('micBtn').onclick=function(){
     if(micOn){stopMic();line('🎙️ ascolto fermato');return;}
     if(!navigator.mediaDevices||!(window.AudioContext||window.webkitAudioContext)){

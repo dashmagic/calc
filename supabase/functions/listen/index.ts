@@ -37,6 +37,16 @@ function dictParse(text: string, lang: string) {
   return ri >= 0 && si >= 0 ? RANKS[ri] + SUIT_L[si] : null;
 }
 
+// c'è almeno UNA parola-carta (valore o seme)? Se no, è pura conversazione → non chiamo l'LLM (risparmio Groq).
+function hasSignal(text: string, lang: string) {
+  const t = " " + text.toLowerCase().replace(/[.,!?;:]/g, " ").replace(/\s+/g, " ") + " ";
+  const rw = RANK_WORDS[lang] ?? RANK_WORDS.en;
+  const sw = SUIT_WORDS[lang] ?? SUIT_WORDS.en;
+  for (const ws of rw) for (const w of ws) if (t.includes(" " + w + " ")) return true;
+  for (const ws of sw) for (const w of ws) if (t.includes(" " + w + " ")) return true;
+  return false;
+}
+
 function codeToIdx(code: string) {
   const m = String(code).toUpperCase().match(/^(10|[2-9]|[AJQK])([SHDC])$/);
   if (!m) return { card: null, rank: -1, suit: -1 };
@@ -131,7 +141,8 @@ Deno.serve(async (req) => {
     // 2) interpretazione: prima il dizionario DETERMINISTICO (parlato chiaro → sempre esatto),
     //    poi l'LLM per il parlato storpiato/dialetto, infine cross-lingua.
     let code: string | null = dictParse(text, lang);
-    if (!code) { try { code = await llmCard(text, lang); } catch { /* ignore */ } }
+    const signal = hasSignal(text, lang) || hasSignal(text, "it") || hasSignal(text, "en") || hasSignal(text, "sq");
+    if (!code && signal) { try { code = await llmCard(text, lang); } catch { /* ignore */ } }  // LLM solo se c'è un indizio di carta
     if (!code) code = dictParse(text, "it") ?? dictParse(text, "en") ?? dictParse(text, "sq");
 
     const idx = code ? codeToIdx(code) : { card: null, rank: -1, suit: -1 };
