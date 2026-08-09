@@ -114,7 +114,8 @@
   <div class="mods" id="modPicker">
     <button class="mod sel" data-mod="oracolo"><b>Oracolo</b><small>YouTube</small></button>
     <button class="mod" data-mod="mosaic"><b>Mosaic</b><small>Rullino foto</small></button>
-    <button class="mod" data-mod="site"><b>Sito</b><small>bushishow.com</small></button>
+    <button class="mod" data-mod="site"><b>Occhio</b><small>bushishow.com</small></button>
+    <button class="mod" data-mod="phantom"><b>Phantom</b><small>carta nel telefono</small></button>
     <button class="mod" data-mod="tutto"><b>Arma tutto</b><small>ogni canale</small></button>
   </div>
 
@@ -327,15 +328,20 @@
         });
     }else if(state.mod==='site'){
       var lg3=L();
-      line('sito: <span class="act">'+lg3.ranks[state.rank]+' / '+lg3.suits[state.suit]+'</span>');
-      p=api('site',{action:'arm',card:RANKL[state.rank]+SUITS[state.suit].l,lang:cfg.lang||'en',ts:nowTs(),ttl:180})
-        .then(function(j){if(j.ok)line('🌐 sito armato per 3 min — «apri il mio sito»');return j;});
+      line('occhio: <span class="act">'+lg3.ranks[state.rank]+' / '+lg3.suits[state.suit]+'</span>');
+      p=api('site',{action:'arm',card:RANKL[state.rank]+SUITS[state.suit].l,lang:cfg.lang||'en',ts:nowTs(),ttl:180,mode:'eye'})
+        .then(function(j){if(j.ok)line('👁️ occhio armato per 3 min — «guardami nell\'occhio»');return j;});
+    }else if(state.mod==='phantom'){
+      var lg5=L();
+      line('phantom: <span class="act">'+lg5.ranks[state.rank]+' / '+lg5.suits[state.suit]+'</span>');
+      p=api('site',{action:'arm',card:RANKL[state.rank]+SUITS[state.suit].l,lang:cfg.lang||'en',ts:nowTs(),ttl:180,mode:'phantom'})
+        .then(function(j){if(j.ok)line('👻 phantom armato — «apri il mio sito, poi sbatti»');return j;});
     }else if(state.mod==='tutto'){
       var lg4=L();
       var code=RANKL[state.rank]+SUITS[state.suit].l;
       line('ARMA TUTTO: <span class="act">'+lg4.ranks[state.rank]+' / '+lg4.suits[state.suit]+'</span>');
-      var jobs=[ api('site',{action:'arm',card:code,lang:cfg.lang||'en',ts:nowTs(),ttl:180})
-        .then(function(j){line(j&&j.ok?'  🌐 sito ✓':'  🌐 sito ✗');return j;}) ];
+      var jobs=[ api('site',{action:'arm',card:code,lang:cfg.lang||'en',ts:nowTs(),ttl:180,mode:'all'})
+        .then(function(j){line(j&&j.ok?'  👁️👻 occhio + phantom ✓':'  sito ✗');return j;}) ];
       if(cfg.video)jobs.push( api('oracolo',{video_id:cfg.video,lang:cfg.lang||'en',card:code,title:cardTitle(state.rank,state.suit)})
         .then(function(j){line(j&&j.ok?'  ▶ youtube ✓':'  ▶ youtube —');return j;}).catch(function(){}) );
       p=Promise.all(jobs).then(function(){return {ok:true};});
