@@ -373,6 +373,7 @@
   var micOn=false,micStream=null,chunkRec=null,lastArm=0,lastCode='',wakeLock=null;
   var CHUNK_MS=3800;
   var audioCtx=null,srcNode=null,procNode=null,muteNode=null,sampleBuf=[],capTimer=null,OUT_RATE=16000;
+  var rollLen=0,WINDOW_S=5.5,STEP_MS=2500;   // finestre SOVRAPPOSTE: 5,5s che avanzano ogni 2,5s
   function keepAwake(){
     if('wakeLock' in navigator){
       navigator.wakeLock.request('screen').then(function(w){wakeLock=w;}).catch(function(){});
@@ -393,8 +394,10 @@
     if(wakeLock){try{wakeLock.release()}catch(_){}wakeLock=null;}
     $('micBtn').classList.remove('live');$('micBtn').textContent='🎙️ Ascolto continuo';
   }
-  // Cattura CONTINUA via Web Audio: il microfono si attiva UNA volta sola e non si
-  // riaccende mai più → niente suono/pop di riattivazione. Ogni CHUNK_MS costruisco un WAV.
+  // Ascolto SEMPRE attivo, come una persona: il microfono si attiva UNA volta sola (nessun
+  // pop) e seguo il parlato in continuo. Appena fai una piccola PAUSA analizzo tutta la frase
+  // INTERA → la carta non è mai tagliata a metà, in qualunque punto del discorso la dici.
+  // (VAD: rilevamento voce con soglia ADATTIVA al rumore dell'ambiente + pre-roll.)
   function startCapture(stream){
     var AC=window.AudioContext||window.webkitAudioContext;
     audioCtx=new AC();
@@ -403,12 +406,29 @@
     procNode=audioCtx.createScriptProcessor(4096,1,1);
     muteNode=audioCtx.createGain();muteNode.gain.value=0;   // uscita muta → nessun ritorno in cassa
     srcNode.connect(procNode);procNode.connect(muteNode);muteNode.connect(audioCtx.destination);
-    sampleBuf=[];
+    var frameMs=4096/audioCtx.sampleRate*1000;             // ~85ms per frame
+    var speaking=false,silMs=0,uttMs=0,utter=[],pre=[],PRE=4,noiseFloor=0.006;  // PRE≈340ms pre-roll
     procNode.onaudioprocess=function(ev){
       if(!micOn)return;
-      var d=ev.inputBuffer.getChannelData(0),c=new Float32Array(d.length);c.set(d);sampleBuf.push(c);
+      var d=ev.inputBuffer.getChannelData(0),c=new Float32Array(d.length);c.set(d);
+      var rms=0;for(var i=0;i<c.length;i++)rms+=c[i]*c[i];rms=Math.sqrt(rms/c.length);
+      if(!speaking){
+        noiseFloor=0.995*noiseFloor+0.005*rms;             // impara il rumore di fondo
+        pre.push(c);if(pre.length>PRE)pre.shift();
+        if(rms>Math.max(0.012,noiseFloor*4)){speaking=true;utter=pre.slice();uttMs=pre.length*frameMs;silMs=0;}
+      }else{
+        utter.push(c);uttMs+=frameMs;
+        if(rms<Math.max(0.008,noiseFloor*2.5))silMs+=frameMs;else silMs=0;
+        if(silMs>=650||uttMs>=7000)endUtter();             // pausa = frase finita · o troppo lunga
+      }
     };
-    capTimer=setInterval(flushChunk,CHUNK_MS);
+    function endUtter(){
+      var parts=utter,ms=uttMs;speaking=false;utter=[];pre=[];uttMs=0;silMs=0;
+      if(ms<350)return;                                    // rumore breve → ignora
+      var len=0;parts.forEach(function(a){len+=a.length;});
+      var pcm=new Float32Array(len),off=0;parts.forEach(function(a){pcm.set(a,off);off+=a.length;});
+      sendSamples(pcm);
+    }
   }
   function encodeWav(pcm,inRate){
     var ratio=inRate/OUT_RATE,outLen=Math.max(1,Math.floor(pcm.length/ratio)),out=new Float32Array(outLen);
@@ -422,13 +442,8 @@
     var off=44;for(var j=0;j<out.length;j++){var s=Math.max(-1,Math.min(1,out[j]));v.setInt16(off,s<0?s*0x8000:s*0x7FFF,true);off+=2;}
     return new Blob([buf],{type:'audio/wav'});
   }
-  function flushChunk(){
-    if(!micOn||!sampleBuf.length||!audioCtx)return;
-    var parts=sampleBuf;sampleBuf=[];
-    var len=0;parts.forEach(function(a){len+=a.length;});
-    var pcm=new Float32Array(len),off=0;parts.forEach(function(a){pcm.set(a,off);off+=a.length;});
-    var rms=0;for(var i=0;i<pcm.length;i++)rms+=pcm[i]*pcm[i];rms=Math.sqrt(rms/pcm.length);
-    if(rms<0.006)return;                        // silenzio → non inviare
+  function sendSamples(pcm){
+    if(!audioCtx)return;
     var wav=encodeWav(pcm,audioCtx.sampleRate);
     fetch(cfg.url.replace(/\/$/,'')+'/functions/v1/listen?pin='+encodeURIComponent(cfg.pin)+
       '&lang='+(cfg.lang||'it'),

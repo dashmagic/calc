@@ -19,20 +19,21 @@ const SUIT_L = ["S", "H", "D", "C"];
 const RANK_WORDS: Record<string, string[][]> = {
   it: [["asso","assi","aso"],["due"],["tre"],["quattro"],["cinque"],["sei"],["sette"],["otto"],["nove"],["dieci"],["fante","jack","j"],["donna","regina","dama"],["re"]],
   en: [["ace"],["two"],["three"],["four"],["five"],["six"],["seven"],["eight"],["nine"],["ten"],["jack"],["queen"],["king"]],
-  sq: [["as","asi","asit","njishi","njeshi","njesh"],["dy","dyshi","dysh","dyta"],["tre","treshi","tresh","treta"],["kater","katër","katërsh","katra","katr"],["pese","pesë","pesa","pes"],["gjashte","gjashtë","gjashta","gjasht"],["shtate","shtatë","shtata","shtat"],["tete","tetë","teta","tet"],["nente","nëntë","nenta","nanta","nent"],["dhjete","dhjetë","dhjeta","dhjet"],["fant","fanti","fante"],["dama","cupa","çupa","damë"],["mbret","mbreti","mbretit"]],
+  sq: [["as","asi","asit","njishi","njeshi","njesh","një","nje","njeri"],["dy","dyshi","dysh","dyta"],["tre","treshi","tresh","treta"],["kater","katër","katërsh","katra","katr"],["pese","pesë","pesa","pes"],["gjashte","gjashtë","gjashta","gjasht"],["shtate","shtatë","shtata","shtat"],["tete","tetë","teta","tet","thete","thetë","theta","thetër","theter"],["nente","nëntë","nenta","nanta","nent"],["dhjete","dhjetë","dhjeta","dhjet","dieta","dietë","djeter","djetër","djet","xhet"],["fant","fanti","fante"],["dama","cupa","çupa","damë"],["mbret","mbreti","mbretit"]],
 };
 const SUIT_WORDS: Record<string, string[][]> = {
   it: [["picche","picca","spade","spada"],["cuori","cuore","core"],["quadri","quadro","denari"],["fiori","fiore","bastoni"]],
   en: [["spades","spade"],["hearts","heart"],["diamonds","diamond"],["clubs","club"]],
-  sq: [["maca","maça","maç","mac"],["kupa","kupë","kupe","kup"],["karo","karro","kuadro"],["spathi","spath","spati","spade"]],
+  sq: [["maca","maça","maç","mac","matcha","matsha","macha"],["kupa","kupë","kupe","kup","zemer","zemër","zemra","zemre"],["karo","karro","kuadro"],["spathi","spath","spati","spade"]],
 };
 function dictParse(text: string, lang: string) {
   const t = " " + text.toLowerCase().replace(/[.,!?;:]/g, " ").replace(/\s+/g, " ") + " ";
   const rw = RANK_WORDS[lang] ?? RANK_WORDS.en;
   const sw = SUIT_WORDS[lang] ?? SUIT_WORDS.en;
   let ri = -1, si = -1;
-  rw.forEach((ws, i) => ws.forEach((w) => { if (t.includes(" " + w + " ") || t.includes(" " + w)) ri = i; }));
-  sw.forEach((ws, i) => ws.forEach((w) => { if (t.includes(w)) si = i; }));
+  // match a PAROLA INTERA (token tra spazi) → alta precisione, niente falsi positivi su pezzi di parola
+  rw.forEach((ws, i) => ws.forEach((w) => { if (t.includes(" " + w + " ")) ri = i; }));
+  sw.forEach((ws, i) => ws.forEach((w) => { if (t.includes(" " + w + " ")) si = i; }));
   return ri >= 0 && si >= 0 ? RANKS[ri] + SUIT_L[si] : null;
 }
 
@@ -48,17 +49,21 @@ async function llmCard(text: string, lang: string): Promise<string | null> {
     "imperfette dello speech-to-text. Fai SEMPRE matching FONETICO: scegli il valore e il seme più " +
     "vicini per suono, anche se la parola è scritta male.\n" +
     "SEMI → S = picche/spade/spada/spades (storpiati: pitte, pitt, picca, spads) / maça/maca; " +
-    "H = cuori/cuore/core/hearts / kupa/kupë; " +
+    "H = cuori/cuore/core/hearts / kupa/kupë/zemër/zemer (me zemër); " +
     "D = quadri/quadro/denari/diamonds (storpiato: quadre) / karo; " +
     "C = fiori/fiore/bastoni/clubs (storpiato: fiore) / spathi/spath.\n" +
     "VALORI → A = asso/ace/as/njishi/njeshi; 2 = due/two/dy/dyshi; 3 = tre/three/treshi; " +
     "4 = quattro/four/katër/katra/katr; 5 = cinque/five/pesë/pesa/pes; 6 = sei/six/gjashtë/gjashta/gjasht; " +
     "7 = sette/seven/shtatë/shtata/shtat; 8 = otto/eight/tetë/teta/tet; 9 = nove/nine/nëntë/nenta/nent; " +
     "10 = dieci/ten/dhjetë/dhjeta/dhjet; J = fante/jack/fant; Q = donna/regina/dama/queen/cupa; " +
-    "K = re/king/mbret. (In albanese le figure colloquiali finiscono spesso in -a o senza vocale finale.)\n" +
-    "La carta può essere detta in QUALSIASI ordine (valore-seme o seme-valore). Sii DECISO: se c'è un " +
-    "valore E un seme (anche storpiati) dai sempre il codice. Rispondi NONE solo se manca del tutto il " +
-    "valore o il seme.\n" +
+    "K = re/king/mbret. (Albanese: le figure colloquiali finiscono in -a o senza vocale finale. " +
+    "Whisper può storpiare: 'thetër/theta'=tetë=8; 'dieta/djetër/xhet'=dhjetë=10; 'statë/stët'=shtatë=7; " +
+    "'matcha/matsha'=maça=picche; 'zemër'=kupa=cuori.)\n" +
+    "La carta può essere detta in QUALSIASI ordine (valore-seme o seme-valore), anche in mezzo a una " +
+    "frase. Se il testo nomina CHIARAMENTE un valore E un seme, dai il codice (anche se storpiati). " +
+    "MA se è solo conversazione e NON nomina una carta, o manca il valore o il seme, rispondi NONE: " +
+    "non inventare MAI una carta dal nulla, non forzare. Esempi che danno NONE: 'po flasim pak', " +
+    "'allora vediamo un attimo', 'buonasera a tutti', 'si tani', 'come va', 'facciamo un gioco'.\n" +
     "Rispondi SOLO con il codice a 2-3 caratteri (es: AH, 10S, KD, 7C, QC). Nient'altro.";
   const r = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
@@ -103,7 +108,8 @@ Deno.serve(async (req) => {
     // 1) Whisper (prompt di contesto: si parla di carte da gioco)
     const fd = new FormData();
     fd.append("file", new Blob([inBytes], { type: mime }), `a.${ext}`);
-    fd.append("model", "whisper-large-v3");
+    // Albanese = lingua meno diffusa → large-v3 pieno (più preciso). IT/EN = turbo (veloce).
+    fd.append("model", lang === "sq" ? "whisper-large-v3" : "whisper-large-v3-turbo");
     if (lang) fd.append("language", lang);
     fd.append("temperature", "0");
     const WPROMPT: Record<string, string> = {
