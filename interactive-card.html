@@ -20,14 +20,12 @@
     font-family:'Playfair Display',serif;font-size:16px;z-index:50}
   #layer{position:fixed;inset:0;z-index:40;pointer-events:none;perspective:1300px;display:none}
   #layer.on{display:block}
-  #shadow{position:absolute;left:50%;top:46%;width:min(210px,52vw);aspect-ratio:239/335;
-    margin-left:-26vw;margin-top:-18vh;border-radius:14px;background:#000;filter:blur(26px);opacity:.55;pointer-events:none}
-  #card{position:absolute;left:50%;top:46%;width:min(210px,52vw);aspect-ratio:239/335;margin-left:-26vw;margin-top:-18vh;
-    transform-style:preserve-3d;pointer-events:auto;touch-action:none;will-change:transform;
-    border-radius:11px;background:#fdfcf8;
-    box-shadow:0 1px 0 1px rgba(0,0,0,.25), 0 0 0 .5px rgba(0,0,0,.35);}
-  #cardinner{position:absolute;inset:0;border-radius:13px;overflow:hidden;transform-style:preserve-3d;background:#f7f4ee}
-  #card img{width:100%;height:100%;display:block;object-fit:cover}
+  #shadow{position:absolute;left:0;top:0;width:min(360px,86vw);aspect-ratio:239/335;
+    border-radius:18px;background:#000;filter:blur(34px);opacity:.5;pointer-events:none}
+  #card{position:absolute;left:0;top:0;width:min(360px,86vw);aspect-ratio:239/335;
+    transform-style:preserve-3d;pointer-events:auto;touch-action:none;will-change:transform;}
+  #cardinner{position:absolute;inset:0;border-radius:16px;overflow:hidden;transform-style:preserve-3d;background:transparent}
+  #card img{width:100%;height:100%;display:block;object-fit:contain}
   /* riflesso lucido molto sottile, solo con l'inclinazione */
   #glare{position:absolute;inset:0;pointer-events:none;mix-blend-mode:screen;border-radius:13px;opacity:.45;
     background:linear-gradient(115deg,rgba(255,255,255,0) 40%,rgba(255,255,255,.28) 50%,rgba(255,255,255,0) 60%);
@@ -50,14 +48,14 @@
 <script>
 (function(){
   var EP="https://svvylcewvscbgwukwzdh.supabase.co/functions/v1/site?profile=dash";
-  var CARDS="https://svvylcewvscbgwukwzdh.supabase.co/storage/v1/object/public/thumbs/cards-real/";
+  var CARDS="https://svvylcewvscbgwukwzdh.supabase.co/storage/v1/object/public/thumbs/cards-photo/";
   var EXT=".png";
   var enable=document.getElementById('enable'),layer=document.getElementById('layer'),
       card=document.getElementById('card'),img=document.getElementById('cardimg'),
       glare=document.getElementById('glare'),tip=document.getElementById('tip'),
       shadow=document.getElementById('shadow');
-  var pending=null,shown=false,ready=false;
-  var dragX=0,dragY=0, dragging=false, gone=false, flung=false;
+  var pending=null,shown=false,ready=false,done=false;
+  var dragX=0,dragY=0, dragging=false, gone=false, flung=false, flingRot=0;
   var vx=0,vy=0,lastX=0,lastY=0,lastT=0, gGamma=0,gBeta=40;
 
   function poll(){fetch(EP,{cache:'no-store'}).then(function(r){return r.json();}).then(function(j){
@@ -71,76 +69,78 @@
     gBeta =e.beta||40;      // avanti-indietro (~40 quando tieni il telefono normale)
   }
   function onMotion(e){
-    if(shown||!pending)return;
+    if(shown||done||!pending)return;
     var a=e.accelerationIncludingGravity||{};
     var m=Math.sqrt((a.x||0)*(a.x||0)+(a.y||0)*(a.y||0)+(a.z||0)*(a.z||0));
     if(m>26){appear();}
   }
+  var DEAD=14;   // inclinazione DECISA: sotto questa soglia la carta resta ferma
   function loop(){
     requestAnimationFrame(loop);
     if(!shown)return;
-    var cw=card.offsetWidth||190, ch=card.offsetHeight||266;
-    var maxX=Math.max(0,(window.innerWidth-cw)/2-6);
-    var maxY=Math.max(0,(window.innerHeight-ch)/2-6);
-    if(!dragging){
-      // GRAVITÀ: inclinazione → la carta scivola verso il basso della pendenza
-      var gx=Math.max(-45,Math.min(45,gGamma));
-      var gy=Math.max(-45,Math.min(45,gBeta-40));
-      vx+=gx*0.045; vy+=gy*0.045;
-      vx*=0.88; vy*=0.88;
+    var cw=card.offsetWidth||300, ch=card.offsetHeight||420;
+    var baseX=(window.innerWidth-cw)/2, baseY=window.innerHeight*0.46-ch/2;
+    var minX=-baseX, maxX=window.innerWidth-cw-baseX;
+    var minY=-baseY, maxY=window.innerHeight-ch-baseY;
+    if(!dragging && !flung){
+      // solo se inclini DECISO (oltre la zona morta) la carta scivola
+      var gx=gGamma, gy=gBeta-40;
+      var ax=Math.abs(gx)>DEAD ? Math.max(-40,Math.min(40,gx-Math.sign(gx)*DEAD)) : 0;
+      var ay=Math.abs(gy)>DEAD ? Math.max(-40,Math.min(40,gy-Math.sign(gy)*DEAD)) : 0;
+      vx+=ax*0.07; vy+=ay*0.07;
+      vx*=0.85; vy*=0.85;
+      if(!ax && Math.abs(vx)<0.15) vx=0;
+      if(!ay && Math.abs(vy)<0.15) vy=0;
       dragX+=vx; dragY+=vy;
+      if(dragX<minX){dragX=minX;vx=0;} if(dragX>maxX){dragX=maxX;vx=0;}
+      if(dragY<minY){dragY=minY;vy=0;} if(dragY>maxY){dragY=maxY;vy=0;}
+    }else if(flung){
+      dragX+=vx; dragY+=vy; vx*=0.99; vy*=0.99; flingRot+=vx*0.5;
+      if(baseX+dragX< -cw*1.2 || baseX+dragX>window.innerWidth+cw*0.2 ||
+         baseY+dragY< -ch*1.2 || baseY+dragY>window.innerHeight+ch*0.2){dismiss();}
     }
-    if(!flung){
-      if(dragX>maxX){dragX=maxX;vx*=-0.2;} if(dragX<-maxX){dragX=-maxX;vx*=-0.2;}
-      if(dragY>maxY){dragY=maxY;vy*=-0.2;} if(dragY<-maxY){dragY=-maxY;vy*=-0.2;}
-    }else{
-      dragX+=vx;dragY+=vy;vx*=0.99;vy*=0.99;
-      if(Math.abs(dragX)>window.innerWidth||Math.abs(dragY)>window.innerHeight){dismiss();}
-    }
-    var floatY=Math.sin(Date.now()/800)*2.5;
-    card.style.transform='translate('+dragX+'px,'+(dragY+floatY)+'px)';
-    // riflesso lucido segue l'inclinazione
-    glare.style.backgroundPosition=(50-gGamma*1.3)+'% '+(50+(gBeta-40)*1.3)+'%';
-    // ombra sotto la carta
-    shadow.style.transform='translate('+dragX+'px,'+(dragY+16)+'px)';
+    card.style.transform='translate('+(baseX+dragX)+'px,'+(baseY+dragY)+'px)'+(flung?' rotate('+flingRot+'deg)':'');
+    glare.style.backgroundPosition=(50-gGamma*1.2)+'% '+(50+(gBeta-40)*1.2)+'%';
+    shadow.style.transform='translate('+(baseX+dragX)+'px,'+(baseY+dragY+18)+'px)';
   }
 
   function appear(){
-    if(shown)return;shown=true;layer.classList.add('on');
+    if(shown||done)return;shown=true;layer.classList.add('on');
     tip.textContent='Muovi il telefono… poi trascìnala via';tip.classList.add('on');
     setTimeout(function(){tip.classList.remove('on');},4500);
     card.animate([{opacity:0,transform:'scale(.6)'},{opacity:1,transform:'scale(1)'}],{duration:700,easing:'cubic-bezier(.16,1.2,.3,1)'});
     if(navigator.vibrate)navigator.vibrate([30,40,90]);
   }
   function dismiss(){
-    if(gone)return;gone=true;
+    if(gone)return;gone=true;done=true;   // consumata: non riappare più (serve ri-armare + ricaricare)
     var dir=dragX>=0?1:-1;
     card.animate([{transform:card.style.transform},{transform:'translate('+(dir*window.innerWidth)+'px,'+(dragY-200)+'px) rotate('+(dir*40)+'deg)',opacity:0}],{duration:420,easing:'ease-in'});
-    setTimeout(function(){layer.classList.remove('on');shown=false;gone=false;flung=false;dragX=dragY=vx=vy=0;
-      card.style.transform='';/* pronto per il prossimo trucco */ pending=null; poll();},420);
+    setTimeout(function(){layer.classList.remove('on');shown=false;
+      enable.style.display='';enable.textContent='↻ Nuovo trucco';enable.onclick=function(){location.reload();};},420);
   }
 
   // trascinamento
-  card.addEventListener('pointerdown',function(e){dragging=true;card.setPointerCapture(e.pointerId);
-    lastX=e.clientX;lastY=e.clientY;lastT=Date.now();vx=vy=0;});
+  card.addEventListener('pointerdown',function(e){dragging=true;flung=false;card.setPointerCapture(e.pointerId);
+    lastX=e.clientX;lastY=e.clientY;vx=vy=0;});
   card.addEventListener('pointermove',function(e){if(!dragging)return;
-    var now=Date.now(),dt=Math.max(1,now-lastT);
     var mx=e.clientX-lastX,my=e.clientY-lastY;
-    dragX+=mx;dragY+=my;vx=mx/dt*16;vy=my/dt*16;lastX=e.clientX;lastY=e.clientY;lastT=now;});
+    dragX+=mx;dragY+=my;
+    vx=vx*0.35+mx*0.65; vy=vy*0.35+my*0.65;     // velocità smussata (movimento fluido)
+    lastX=e.clientX;lastY=e.clientY;});
   card.addEventListener('pointerup',function(){dragging=false;
-    // strappo deciso → la carta vola fuori (la "riprendo e la rimetto nel mazzo")
-    if(Math.hypot(vx,vy)>16){flung=true;} });
+    // strappo deciso → la carta vola fuori
+    if(Math.hypot(vx,vy)>10){flung=true; vx*=2.6; vy*=2.6;} });
   card.addEventListener('pointercancel',function(){dragging=false;});
 
   function start(){
     ready=true;enable.style.display='none';
-    poll();setInterval(function(){if(!shown)poll();},2500);
+    poll();setInterval(function(){if(!shown&&!done)poll();},2500);
     window.addEventListener('deviceorientation',onOrient);
     window.addEventListener('devicemotion',onMotion);
     requestAnimationFrame(loop);
     // se già armata e non vuoi il colpo, appare da sola dopo un attimo:
     // (per test: appare al primo colpo O dopo 1.5s se armata)
-    setTimeout(function(){if(pending&&!shown)appear();},1500);
+    setTimeout(function(){if(pending&&!shown&&!done)appear();},1500);
   }
   enable.onclick=function(){
     var need=(typeof DeviceOrientationEvent!=='undefined'&&typeof DeviceOrientationEvent.requestPermission==='function');
