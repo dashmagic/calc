@@ -1,0 +1,130 @@
+<!DOCTYPE html><html lang="it"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>The Bushi Show</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;800&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{min-height:100%}
+  body{background:#08080d;color:#a7a294;font-family:Inter,sans-serif;user-select:none}
+  .nav{padding:18px;text-align:center}.nav a{color:#a7a294;margin:0 10px;text-decoration:none}
+  .hero{min-height:52vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+  .h{font-family:'Playfair Display',serif;color:#d4af37;font-size:30px}
+  .bio{padding:30px 20px;text-align:center;border-top:1px solid #1a1a24}
+  .bio h2{font-family:'Playfair Display',serif;color:#d4af37;font-size:22px;margin-bottom:14px}
+  #portraitDash{max-width:320px;width:90%;border-radius:12px;display:block;margin:0 auto}
+  .sec{padding:30px 20px;text-align:center;border-top:1px solid #1a1a24}
+  /* phantom overlay */
+  #ph{position:fixed;inset:0;z-index:100000;display:none}
+  #ph.on{display:block}
+  #phEnable{position:fixed;inset:0;z-index:100001;display:flex;align-items:center;justify-content:center;
+    background:#000c;backdrop-filter:blur(3px);font-family:'Playfair Display',serif;color:#f0d97a;font-size:20px;text-align:center;padding:30px}
+  #phFlash{position:fixed;inset:0;z-index:45;background:radial-gradient(circle at 50% 46%,#fff,rgba(255,255,255,0) 60%);opacity:0;pointer-events:none}
+  #phShadow,#phCard{position:absolute;left:0;top:0;width:min(360px,86vw);aspect-ratio:239/335}
+  #phShadow{border-radius:18px;background:#000;filter:blur(34px);opacity:.5;pointer-events:none}
+  #phCard{pointer-events:auto;touch-action:none;will-change:transform}
+  #phInner{position:absolute;inset:0;border-radius:16px;overflow:hidden}
+  #phCard img{width:100%;height:100%;display:block;object-fit:contain}
+  #phGlare{position:absolute;inset:0;pointer-events:none;mix-blend-mode:screen;border-radius:16px;opacity:.45;
+    background:linear-gradient(115deg,rgba(255,255,255,0) 40%,rgba(255,255,255,.28) 50%,rgba(255,255,255,0) 60%);background-size:300% 300%;background-position:50% 50%}
+  #phTip{position:fixed;top:calc(14px + env(safe-area-inset-top));left:0;right:0;text-align:center;font-family:'Playfair Display',serif;color:#f0d97a;font-size:15px;opacity:0;transition:opacity .8s;z-index:100002;pointer-events:none}
+  #phTip.on{opacity:.85}
+</style></head><body>
+<div class="nav"><a>Home</a><a>Show</a><a>Gallery</a><a>Contact</a></div>
+<div class="hero"><div class="h">The Bushi Show</div><p>Father &amp; Son · Magic &amp; Mentalism</p>
+  <p style="font-size:12px;opacity:.5;margin-top:8px">home di prova · occhio + phantom</p></div>
+<div class="bio"><h2>Dashnor</h2><img id="portraitDash" alt="Dashnor"
+  src="https://svvylcewvscbgwukwzdh.supabase.co/storage/v1/object/public/thumbs/portraits/dash.jpg"></div>
+<div class="sec">As seen on Rai 1</div>
+
+<div id="phFlash"></div>
+<div id="ph"><div id="phShadow"></div><div id="phCard"><div id="phInner"><img id="phImg" alt=""><div id="phGlare"></div></div></div></div>
+<div id="phEnable" style="display:none">👻<br>Tocca lo schermo per iniziare</div>
+<div id="phTip"></div>
+
+<script>
+(function(){
+  var EP="https://svvylcewvscbgwukwzdh.supabase.co/functions/v1/site?profile=dash";
+  var EYE="https://svvylcewvscbgwukwzdh.supabase.co/storage/v1/object/public/thumbs/eyecards/dash/";
+  var PH="https://svvylcewvscbgwukwzdh.supabase.co/storage/v1/object/public/thumbs/cards-photo/";
+  var TIP={it:"Muovi il telefono… poi trascìnala via",en:"Move the phone… then swipe it away",sq:"Lëviz telefonin… pastaj hidhe"};
+  var origPortrait=null, eyeDone=false;
+  var ph=document.getElementById('ph'),phCard=document.getElementById('phCard'),phImg=document.getElementById('phImg'),
+      phShadow=document.getElementById('phShadow'),phInner=document.getElementById('phInner'),phGlare=document.getElementById('phGlare'),
+      phFlash=document.getElementById('phFlash'),phEnable=document.getElementById('phEnable'),phTip=document.getElementById('phTip');
+  var pending=null,mode='',lang='it';
+  var phEnabled=false,phShown=false,phDone=false;
+  var dragX=0,dragY=0,dragging=false,gone=false,flung=false,flingRot=0,vx=0,vy=0,lastX=0,lastY=0,gGamma=0,gBeta=40;
+  var DEAD=14;
+
+  function poll(){fetch(EP,{cache:'no-store'}).then(function(r){return r.json();}).then(function(j){
+    if(!j)return; mode=j.mode||''; lang=j.lang||'it';
+    var code=j.card&&/^(10|[2-9]|[AJQK])[SHDC]$/.test(j.card)?j.card:null; pending=code;
+    // OCCHIO (passivo): swap ritratto
+    var el=document.getElementById('portraitDash');
+    if(el){ if(!eyeDone&&origPortrait===null&&el.src.indexOf('eyecards')<0)origPortrait=el.src;
+      if(code&&(mode==='eye'||mode==='all')){var im=new Image();im.onload=function(){el.src=EYE+code+'.jpg';};im.src=EYE+code+'.jpg';}
+      else if(origPortrait){el.src=origPortrait;} }
+    // PHANTOM: prepara (attende tocco+sbattimento)
+    if(code&&(mode==='phantom'||mode==='all')&&!phDone){ phImg.src=PH+code+'.png';
+      if(!phEnabled && phEnable.style.display==='none'){ phEnable.style.display='flex'; } }
+    else if(!code){ phEnable.style.display='none'; }
+  }).catch(function(){});}
+
+  phEnable.onclick=function(){
+    phEnable.style.display='none';
+    var need=(typeof DeviceMotionEvent!=='undefined'&&typeof DeviceMotionEvent.requestPermission==='function');
+    function go(){phEnabled=true;
+      window.addEventListener('devicemotion',onMotion);window.addEventListener('deviceorientation',onOrient);
+      requestAnimationFrame(loop);
+      phTip.textContent='Sbatti il telefono';phTip.classList.add('on');setTimeout(function(){phTip.classList.remove('on');},3500);}
+    if(need){DeviceMotionEvent.requestPermission().then(function(s){
+      if(typeof DeviceOrientationEvent!=='undefined'&&DeviceOrientationEvent.requestPermission)DeviceOrientationEvent.requestPermission().catch(function(){});
+      go();}).catch(go);} else go();
+  };
+  function onOrient(e){gGamma=e.gamma||0;gBeta=e.beta||40;}
+  function onMotion(e){
+    if(phShown||phDone||!pending)return;
+    var a=e.acceleration;
+    if(a&&(a.x!=null||a.y!=null||a.z!=null)){var m=Math.hypot(a.x||0,a.y||0,a.z||0);if(m>19)phAppear();}
+    else{var g=e.accelerationIncludingGravity||{};if(Math.hypot(g.x||0,g.y||0,g.z||0)>32)phAppear();}
+  }
+  function phAppear(){
+    if(phShown||phDone)return;phShown=true;ph.classList.add('on');phTip.classList.remove('on');
+    phFlash.animate([{opacity:0},{opacity:.85,offset:.12},{opacity:0}],{duration:340});
+    ph.animate([{transform:'translateY(0)'},{transform:'translateY(9px)'},{transform:'translateY(0)'}],{duration:240});
+    phInner.animate([{opacity:0,transform:'translateY(-70px) scale(.18) rotate(-8deg)'},
+      {opacity:1,offset:.55,transform:'translateY(8px) scale(1.14) rotate(2deg)'},
+      {opacity:1,transform:'translateY(0) scale(1) rotate(0)'}],{duration:560,easing:'cubic-bezier(.2,1.35,.35,1)'});
+    phTip.textContent=TIP[lang]||TIP.it;phTip.classList.add('on');setTimeout(function(){phTip.classList.remove('on');},4500);
+    if(navigator.vibrate)navigator.vibrate([60,25,140]);
+  }
+  function loop(){requestAnimationFrame(loop);if(!phShown)return;
+    var cw=phCard.offsetWidth||300,ch=phCard.offsetHeight||420;
+    var bX=(innerWidth-cw)/2,bY=innerHeight*0.46-ch/2;
+    if(!dragging&&!flung){var gx=gGamma,gy=gBeta-40;
+      var ax=Math.abs(gx)>DEAD?Math.max(-40,Math.min(40,gx-Math.sign(gx)*DEAD)):0;
+      var ay=Math.abs(gy)>DEAD?Math.max(-40,Math.min(40,gy-Math.sign(gy)*DEAD)):0;
+      vx+=ax*0.07;vy+=ay*0.07;vx*=0.85;vy*=0.85;
+      if(!ax&&Math.abs(vx)<0.15)vx=0; if(!ay&&Math.abs(vy)<0.15)vy=0;
+      dragX+=vx;dragY+=vy;
+      var mnX=-bX,mxX=innerWidth-cw-bX,mnY=-bY,mxY=innerHeight-ch-bY;
+      if(dragX<mnX){dragX=mnX;vx=0;}if(dragX>mxX){dragX=mxX;vx=0;}if(dragY<mnY){dragY=mnY;vy=0;}if(dragY>mxY){dragY=mxY;vy=0;}
+    }else if(flung){dragX+=vx;dragY+=vy;vx*=0.99;vy*=0.99;flingRot+=vx*0.5;
+      if(bX+dragX< -cw*1.2||bX+dragX>innerWidth+cw*0.2||bY+dragY< -ch*1.2||bY+dragY>innerHeight+ch*0.2)phDismiss();}
+    phCard.style.transform='translate('+(bX+dragX)+'px,'+(bY+dragY)+'px)'+(flung?' rotate('+flingRot+'deg)':'');
+    phGlare.style.backgroundPosition=(50-gGamma*1.2)+'% '+(50+(gBeta-40)*1.2)+'%';
+    phShadow.style.transform='translate('+(bX+dragX)+'px,'+(bY+dragY+18)+'px)';
+  }
+  phCard.addEventListener('pointerdown',function(e){dragging=true;flung=false;phCard.setPointerCapture(e.pointerId);lastX=e.clientX;lastY=e.clientY;vx=vy=0;});
+  phCard.addEventListener('pointermove',function(e){if(!dragging)return;var mx=e.clientX-lastX,my=e.clientY-lastY;dragX+=mx;dragY+=my;vx=vx*0.35+mx*0.65;vy=vy*0.35+my*0.65;lastX=e.clientX;lastY=e.clientY;});
+  phCard.addEventListener('pointerup',function(){dragging=false;if(Math.hypot(vx,vy)>10){flung=true;vx*=2.6;vy*=2.6;}});
+  phCard.addEventListener('pointercancel',function(){dragging=false;});
+  function phDismiss(){if(gone)return;gone=true;phDone=true;
+    var dir=dragX>=0?1:-1;
+    phCard.animate([{transform:phCard.style.transform},{transform:'translate('+(dir*innerWidth)+'px,'+(dragY-200)+'px) rotate('+(dir*40)+'deg)',opacity:0}],{duration:420,easing:'ease-in'});
+    setTimeout(function(){ph.classList.remove('on');phShown=false;},420);}
+
+  poll();setInterval(poll,3000);
+})();
+</script>
+</body></html>
