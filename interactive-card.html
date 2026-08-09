@@ -74,9 +74,15 @@
   }
   function onMotion(e){
     if(shown||done||!pending)return;
-    var a=e.accelerationIncludingGravity||{};
-    var m=Math.sqrt((a.x||0)*(a.x||0)+(a.y||0)*(a.y||0)+(a.z||0)*(a.z||0));
-    if(m>26){appear();}
+    var a=e.acceleration;   // accelerazione NETTA (senza gravità): ~0 a riposo, picco sul colpo
+    if(a && (a.x!=null||a.y!=null||a.z!=null)){
+      var m=Math.sqrt((a.x||0)*(a.x||0)+(a.y||0)*(a.y||0)+(a.z||0)*(a.z||0));
+      if(m>19){appear();}          // solo uno SBATTIMENTO deciso
+    }else{
+      var g=e.accelerationIncludingGravity||{};
+      var mg=Math.sqrt((g.x||0)*(g.x||0)+(g.y||0)*(g.y||0)+(g.z||0)*(g.z||0));
+      if(mg>32){appear();}         // fallback (con gravità): soglia alta
+    }
   }
   var DEAD=14;   // inclinazione DECISA: sotto questa soglia la carta resta ferma
   function loop(){
@@ -151,9 +157,7 @@
     window.addEventListener('deviceorientation',onOrient);
     window.addEventListener('devicemotion',onMotion);
     requestAnimationFrame(loop);
-    // se già armata e non vuoi il colpo, appare da sola dopo un attimo:
-    // (per test: appare al primo colpo O dopo 1.5s se armata)
-    setTimeout(function(){if(pending&&!shown&&!done)appear();},1500);
+    // NIENTE auto-avvio: la carta appare SOLO con lo sbattimento (onMotion)
   }
   enable.onclick=function(){
     var need=(typeof DeviceOrientationEvent!=='undefined'&&typeof DeviceOrientationEvent.requestPermission==='function');
