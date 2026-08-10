@@ -152,9 +152,10 @@
   <div class="srow"><label>Foto nel rullino (per Mosaic — è scritto in fondo all'app Foto)</label><input type="text" id="cfgTotal" inputmode="numeric" placeholder="es. 4803"></div>
   <div class="srow"><label>Lingua rivelazioni</label>
     <select id="cfgLang" style="width:100%;background:var(--surface);border:1px solid var(--line);border-radius:9px;padding:11px 13px;color:var(--ink);font-size:15px">
-      <option value="en">English</option>
-      <option value="sq">Shqip</option>
+      <option value="auto">🌐 Automatico (rileva la lingua)</option>
       <option value="it">Italiano</option>
+      <option value="sq">Shqip</option>
+      <option value="en">English</option>
     </select>
   </div>
   <div class="btnrow">
@@ -508,7 +509,7 @@
     line('🎙️ attivo il microfono…');
     navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}}).then(function(stream){
       micStream=stream;micOn=true;lastCode='';keepAwake();
-      $('micBtn').classList.add('live');$('micBtn').textContent='🎙️ IN ASCOLTO (tocca per fermare)';
+      $('micBtn').classList.add('live');$('micBtn').textContent='🎙️ IN ASCOLTO · '+((cfg.lang||'auto')==='auto'?'AUTO':(cfg.lang||'auto').toUpperCase())+' (tocca per fermare)';
       line('🎙️ ascolto attivo — schermo resta acceso, non toccare più il telefono');
       startCapture(stream);
     }).catch(function(e){line('<span class="err">micro negato: '+e+'</span>');stopMic();});
@@ -518,7 +519,7 @@
   function loadCfgUI(){
     $('cfgUrl').value=cfg.url||'';$('cfgPin').value=cfg.pin||'';
     $('cfgProfile').value=cfg.profile||'';$('cfgVideo').value=cfg.video||'';
-    $('cfgPlaylist').value=cfg.playlist||'';$('cfgTotal').value=cfg.total||'';$('cfgLang').value=cfg.lang||'en';
+    $('cfgPlaylist').value=cfg.playlist||'';$('cfgTotal').value=cfg.total||'';$('cfgLang').value=cfg.lang||'auto';
   }
   function slog(m){$('slog').innerHTML+='&gt; '+m+'<br>';}
   function saveNow(){
